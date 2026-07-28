@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Prof. Bernard Foing — Lunar &amp; Mars Research Hub | EuroSpaceHub</title>
+<meta name="description" content="Private research hub for interns and student researchers working with Prof. Bernard Foing (ILEWG, ESA SMART-1, Mars Express/HRSC). Profiles, report submission, supervisor review Access is restricted to members of the research group.">
+<meta name="robots" content="noindex, nofollow">
+<link rel="stylesheet" href="assets/css/styles.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><circle cx='16' cy='16' r='13' fill='%233987e5'/><circle cx='11' cy='12' r='3' fill='%230e1524'/><circle cx='21' cy='19' r='4' fill='%230e1524'/></svg>">
+</head>
+<body>
+
+<!-- ============================================================
+     MISSION BACKDROP
+     Decorative layer showing European (ESA) and United States (NASA)
+     lunar and Mars missions. Populated by assets/js/backdrop.js and
+     marked aria-hidden; the hero carries a visible caption naming it.
+     ============================================================ -->
+<div id="backdrop" class="backdrop" aria-hidden="true"></div>
+
+<!-- ============================================================
+     DEMO-MODE BANNER
+     This build ships a STUBBED, client-side authentication and
+     authorisation layer. See README.md § Access control.
+     ============================================================ -->
+<div class="demo-banner" id="demoBanner" role="region" aria-label="Demonstration mode notice">
+  <div class="wrap demo-banner__inner">
+    <span class="demo-banner__tag">DEMO MODE</span>
+    <p class="demo-banner__text">
+      Authentication and access control in this build are <strong>simulated in the browser</strong>
+      (no server, no real security). All data is stored in this browser's <code>localStorage</code>.
+      <a href="#/about-demo">How the access model works &rsaquo;</a>
+    </p>
+    <button class="demo-banner__close" type="button" id="demoBannerClose" aria-label="Dismiss notice">&times;</button>
+  </div>
+</div>
+
+<!-- ============================================================
+     HOST-PLATFORM NAVIGATION
+     Mirrors eurospacehub.com so the module drops into the existing
+     site. External links point back to the host platform; when run
+     standalone they simply leave the module.
+     ============================================================ -->
+<header class="topbar">
+  <div class="wrap topbar__inner">
+    <a class="brand" href="#/">
+      <span class="brand__mark" aria-hidden="true">
+        <svg viewBox="0 0 32 32" width="28" height="28"><circle cx="16" cy="16" r="13" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12.5" r="2.6" fill="currentColor"/><circle cx="21" cy="19.5" r="3.4" fill="currentColor"/></svg>
+      </span>
+      <span class="brand__text">
+        <strong>EuroSpaceHub</strong>
+        <small>Lunar &amp; Mars Research Hub</small>
+      </span>
+    </a>
+
+    <button class="topbar__toggle" id="navToggle" aria-expanded="false" aria-controls="primaryNav" aria-label="Toggle navigation">
+      <span></span><span></span><span></span>
+    </button>
+
+    <nav class="topbar__nav" id="primaryNav" aria-label="Primary">
+      <ul class="hostnav">
+        <li><a href="https://www.eurospacehub.com/about" rel="noopener">About</a></li>
+        <li><a href="https://www.eurospacehub.com/partners" rel="noopener">Partners</a></li>
+        <li><a href="https://www.eurospacehub.com/academy" rel="noopener">Academy</a></li>
+        <li><a href="https://www.eurospacehub.com/blog" rel="noopener">Blog</a></li>
+        <li><a href="https://www.eurospacehub.com/publications" rel="noopener">Publications</a></li>
+        <li class="hostnav__current"><a href="#/" aria-current="page">Research Hub</a></li>
+      </ul>
+    </nav>
+
+    <div class="topbar__session" id="sessionSlot"><!-- rendered by app.js --></div>
+  </div>
+</header>
+
+<!-- Module-level navigation (routes within this hub) -->
+<nav class="subnav" aria-label="Research Hub sections">
+  <div class="wrap subnav__inner" id="subnav"><!-- rendered by app.js --></div>
+</nav>
+
+<main id="view" class="view" tabindex="-1"><!-- rendered by router --></main>
+
+<footer class="footer">
+  <div class="wrap footer__inner">
+    <div class="footer__col">
+      <h3>Lunar &amp; Mars Research Hub</h3>
+      <p>A private research-output module of the EuroSpaceHub platform, hosting the supervised
+         research of interns and student researchers working with Prof. Bernard Foing. Access is
+         restricted to members of the research group.</p>
+    </div>
+    <div class="footer__col">
+      <h3>External resources</h3>
+      <ul class="linklist">
+        <li><a href="https://sci.esa.int/web/ilewg" rel="noopener">ILEWG — International Lunar Exploration Working Group</a></li>
+        <li><a href="https://www.esa.int/" rel="noopener">European Space Agency</a></li>
+        <li><a href="https://www.isunet.edu/" rel="noopener">International Space University</a></li>
+        <li><a href="https://vu.nl/en" rel="noopener">Vrije Universiteit Amsterdam</a></li>
+        <li><a href="https://www.fit.edu/" rel="noopener">Florida Institute of Technology</a></li>
+      </ul>
+    </div>
+    <div class="footer__col">
+      <h3>This build</h3>
+      <ul class="linklist">
+        <li><a href="#/about-demo">Access-control model &amp; demo notes</a></li>
+        <li><a href="#/library">Report library (members only)</a></li>
+      </ul>
+      <p class="footer__note">Demonstration build. Authentication is simulated client-side.</p>
+    </div>
+  </div>
+  <div class="wrap footer__bar">
+    <span>&copy; <span id="yr"></span> EuroSpaceHub — Research Hub module</span>
+    <button class="linkbtn" type="button" id="resetData">Reset demo data</button>
+  </div>
+</footer>
+
+<div id="toasts" class="toasts" aria-live="polite" aria-atomic="false"></div>
+<div id="modalRoot"></div>
+
+<!-- Classic scripts (no ES modules) so the build also runs from file:// -->
+<script src="assets/js/store.js"></script>
+<script src="assets/js/auth.js"></script>
+<script src="assets/js/ui.js"></script>
+<script src="assets/js/charts.js"></script>
+<script src="assets/js/backdrop.js"></script>
+<script src="assets/js/router.js"></script>
+<script src="assets/js/views/foing.js"></script>
+<script src="assets/js/views/library.js"></script>
+<script src="assets/js/views/report.js"></script>
+<script src="assets/js/views/account.js"></script>
+<script src="assets/js/views/profile.js"></script>
+<script src="assets/js/views/submit.js"></script>
+<script src="assets/js/views/dashboard.js"></script>
+<script src="assets/js/views/misc.js"></script>
+<script src="assets/js/app.js"></script>
+</body>
+</html>
