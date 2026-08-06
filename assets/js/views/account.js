@@ -166,20 +166,33 @@
       var issued = store.requestPasswordReset(email);
       var out = document.getElementById('resetOut');
 
-      /* The neutral message is shown either way — it must not reveal whether an
-         account exists for that address. */
-      var neutral = ui.notice('info', 'Check your inbox',
-        'If an account exists for <strong>' + esc(email) + '</strong>, a reset link has been sent ' +
-        'to it. The link expires in 30 minutes and can be used once.');
+      /* NOTE ON WORDING. A real backend answers "if an account exists, we have
+         emailed it" either way, so the form cannot be used to discover which
+         addresses are registered. That answer would be a lie here: nothing is
+         emailed, and displaying the link reveals whether the account exists
+         regardless — the anti-enumeration property cannot survive showing the
+         token on screen. So the UI says what actually happened. The neutral
+         code path is still what store.requestPasswordReset() implements, and
+         it is what a real backend keeps; only the message differs. */
 
-      if (!issued) { out.innerHTML = neutral; return; }
+      if (!issued) {
+        out.innerHTML = ui.notice('info', 'No account found for that address',
+          'Nothing matches <strong>' + esc(email) + '</strong> in this browser. Accounts in this ' +
+          'build live in this browser\'s <code>localStorage</code> and do not travel between ' +
+          'browsers, devices or private windows — an account created elsewhere will not be found ' +
+          'here. You can <a href="#/register">create an account</a>, or sign in with a seeded demo ' +
+          'account (password <code>demo</code>).');
+        return;
+      }
 
       var link = '#/reset?token=' + encodeURIComponent(issued.token);
-      out.innerHTML = neutral +
+      out.innerHTML =
         '<div class="notice notice--warn">' +
-          '<h4>Demonstration substitute for the email</h4>' +
-          '<p>No message was sent. In a real build this link would exist only in the recipient' +
-            's mailbox; showing it here is what makes this step insecure.</p>' +
+          '<h4>No email was sent — there is nothing to send it with</h4>' +
+          '<p>This build has no server and no mail service, so your reset link is below instead of ' +
+            'in your inbox. In a real deployment this page would say &ldquo;check your inbox&rdquo; ' +
+            'and the link would exist only in the mailbox for <strong>' + esc(email) + '</strong>.</p>' +
+          '<p>The link can be used once and expires in 30 minutes.</p>' +
           '<p style="margin-bottom:0"><a class="btn btn--primary btn--sm" href="' + esc(link) + '">' +
             'Open the reset link</a></p>' +
         '</div>';

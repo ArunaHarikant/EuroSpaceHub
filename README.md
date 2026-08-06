@@ -179,15 +179,25 @@ uploaded, and password reset cannot email you (see below).
 Two routes, at `#/reset` and from the supervisor's view of any researcher profile.
 
 **Self-service link.** A researcher enters their address and a single-use token with a 30-minute
-expiry is issued. The response is identical whether or not an account exists, so the form does not
-leak which addresses are registered, and the token is invalidated the moment it is spent — those
-parts are the real thing.
+expiry is issued. The token is invalidated the moment it is spent and re-checked at spend time —
+that lifecycle is the real thing.
 
-**The part that is not real:** there is no mail server, so the link is rendered on the page instead
-of being sent to the mailbox. That means **anyone who knows an address can reset that account**. It
-is labelled as such on screen in red rather than glossed over. Swapping this one step for a genuine
-emailed token is the single most important change a production build must make; the token lifecycle
-around it is already correct.
+**The part that is not real: no email is sent, because there is nothing to send it with.** The link
+is rendered on the page instead of going to the mailbox, which means **anyone who knows an address
+can reset that account**. The page says exactly that, in red, above the form.
+
+A real backend answers *"if an account exists, we have emailed it"* either way, so the form cannot
+be used to discover which addresses are registered. This build does **not** claim that, for two
+reasons: it would be a lie (nothing was emailed), and displaying the link reveals whether the
+account exists regardless — anti-enumeration cannot survive putting the token on screen. So the UI
+states what actually happened, and an unmatched address is told so plainly, along with the reason it
+is the most likely outcome: accounts live in one browser's `localStorage` and do not travel between
+browsers, devices or private windows. `store.requestPasswordReset()` still implements the neutral
+code path a real backend keeps; only the message differs.
+
+Swapping this one step for a genuine emailed token is the single most important change a production
+build must make. **Until then, prefer the supervisor-issued route below** — it is secure as designed,
+whereas a reset form that prints its own token is worse than no reset form at all.
 
 **Supervisor-issued temporary password.** Prof. Foing can issue a temporary password from any
 researcher profile and hand it over directly. It is displayed once and replaces the account password

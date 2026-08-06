@@ -446,7 +446,8 @@ ok('reset page states no email is sent', /No email is sent in this build/.test(t
   f.elements.email.value = 'nobody@example.com';
   f.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
   const out = window.document.getElementById('resetOut');
-  ok('unknown address gets the neutral message', /Check your inbox/.test(out.textContent));
+  ok('unknown address is told so, honestly', /No account found for that address/.test(out.textContent));
+  ok('unknown address explains per-browser storage', /localStorage/.test(out.textContent));
   ok('unknown address yields no reset link', !/#\/reset\?token=/.test(out.innerHTML));
 }
 
@@ -458,7 +459,8 @@ let resetToken = null;
   f.elements.email.value = 'intern.a@demo.eurospacehub.local';
   f.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
   const out = window.document.getElementById('resetOut');
-  ok('known address also gets the neutral message', /Check your inbox/.test(out.textContent));
+  ok('known address is told no email was sent', /No email was sent/.test(out.textContent));
+  ok('no message claims an email was delivered', !/has been sent to it/.test(out.textContent));
   const m = out.innerHTML.match(/#\/reset\?token=([a-z0-9]+)/);
   ok('a reset token was issued', !!m);
   resetToken = m && m[1];
