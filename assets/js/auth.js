@@ -181,6 +181,9 @@
         if (!resource) return false;
         return sup || (!!u && resource.id === u.id);
 
+      case 'user:resetPassword':                         /* issue a temporary password */
+        return sup && !!resource && resource.role !== 'supervisor';
+
       case 'user:readInternalNotes':
       case 'user:writeInternalNotes':
       case 'user:setStanding':

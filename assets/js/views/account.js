@@ -49,6 +49,8 @@
           '<div class="btn-row"><button class="btn btn--primary" type="submit">Sign in</button>' +
             '<a class="btn btn--ghost" href="#/register">Register instead</a></div>' +
           '<p id="siErr" class="field__err" hidden></p>' +
+          '<p class="field__hint" style="margin-top:14px">' +
+            '<a href="#/reset">Forgotten your password?</a></p>' +
         '</form>' +
 
         '<div class="card">' +
@@ -96,6 +98,156 @@
         ui.toast('Now acting as ' + res.user.fullName + ' (' + res.user.role + ').', 'good');
         router.navigate(res.user.role === 'supervisor' ? '#/dashboard' : '#/me');
       });
+    });
+  }
+
+  /* ==========================================================================
+     PASSWORD RESET
+
+     A real deployment mails a single-use token to the address on file, and the
+     token is the only thing proving you control that mailbox. There is no mail
+     server in this build, so the token has to be surfaced on screen — which
+     means anyone who knows an address can reset that account. That is a real
+     hole, it is stated plainly below rather than papered over, and it is the
+     one part of this flow a real backend must replace.
+
+     What IS faithful: single-use tokens with a 30-minute expiry, a neutral
+     response that does not reveal whether an account exists, and invalidation
+     of the token the moment it is spent.
+     ========================================================================== */
+
+  function reset(ctx) {
+    if (auth.isAuthenticated()) {
+      ctx.el.innerHTML = '<div class="wrap">' +
+        ui.notice('info', 'You are already signed in',
+          'Change your password from <a href="#/me">your profile</a>, or sign out first.') + '</div>';
+      return;
+    }
+    if (ctx.query.token) { resetWithToken(ctx, ctx.query.token); return; }
+    requestReset(ctx);
+  }
+
+  /* --- step 1: ask for the address --- */
+  function requestReset(ctx) {
+    ctx.el.innerHTML =
+    '<div class="wrap" style="max-width:620px">' +
+      '<p class="meta" style="margin-bottom:10px"><a href="#/signin">&larr; Back to sign in</a></p>' +
+      '<h1>Reset your password</h1>' +
+      '<p class="lede">Enter the institutional email address on your researcher account.</p>' +
+
+      ui.notice('danger', 'No email is sent in this build',
+        'A real deployment would email you a single-use link and that link would be the only ' +
+        'proof you control the mailbox. This build has no server and no mail service, so the link ' +
+        'is shown on this page instead — meaning <strong>anyone who knows an address can reset ' +
+        'that account</strong>. Replacing this step with a real emailed token is the single most ' +
+        'important change a production build must make.') +
+
+      '<form class="card" id="resetReqForm" novalidate>' +
+        '<div class="field"><label for="rqEmail">Email address <span class="req">*</span></label>' +
+          '<input type="email" id="rqEmail" name="email" autocomplete="username" required></div>' +
+        '<div class="btn-row"><button class="btn btn--primary" type="submit">Continue</button>' +
+          '<a class="btn btn--ghost" href="#/signin">Cancel</a></div>' +
+      '</form>' +
+
+      '<div id="resetOut" style="margin-top:20px"></div>' +
+
+      '<hr><p class="meta">Prof. Foing can also issue you a temporary password directly — for a ' +
+        'small closed group that is often the simpler route, and it is the one a production build ' +
+        'should keep even after email works.</p>' +
+    '</div>';
+
+    var f = document.getElementById('resetReqForm');
+    f.addEventListener('submit', function (e) {
+      e.preventDefault();
+      ui.clearAllErrors(f);
+      var email = f.elements.email.value.trim();
+      if (!ui.isEmail(email)) { ui.fieldError(f.elements.email, 'Enter a valid email address.'); return; }
+
+      var issued = store.requestPasswordReset(email);
+      var out = document.getElementById('resetOut');
+
+      /* The neutral message is shown either way — it must not reveal whether an
+         account exists for that address. */
+      var neutral = ui.notice('info', 'Check your inbox',
+        'If an account exists for <strong>' + esc(email) + '</strong>, a reset link has been sent ' +
+        'to it. The link expires in 30 minutes and can be used once.');
+
+      if (!issued) { out.innerHTML = neutral; return; }
+
+      var link = '#/reset?token=' + encodeURIComponent(issued.token);
+      out.innerHTML = neutral +
+        '<div class="notice notice--warn">' +
+          '<h4>Demonstration substitute for the email</h4>' +
+          '<p>No message was sent. In a real build this link would exist only in the recipient' +
+            's mailbox; showing it here is what makes this step insecure.</p>' +
+          '<p style="margin-bottom:0"><a class="btn btn--primary btn--sm" href="' + esc(link) + '">' +
+            'Open the reset link</a></p>' +
+        '</div>';
+    });
+  }
+
+  /* --- step 2: spend the token and set a new password --- */
+  function resetWithToken(ctx, token) {
+    var found = store.userByResetToken(token);
+
+    if (!found) {
+      ctx.el.innerHTML = '<div class="wrap" style="max-width:620px">' +
+        '<h1>This reset link is not valid</h1>' +
+        ui.notice('danger', 'Unrecognised or already-used link',
+          'Reset links can be used once. Request a new one from the ' +
+          '<a href="#/reset">password reset page</a>.') + '</div>';
+      return;
+    }
+    if (found.expired) {
+      ctx.el.innerHTML = '<div class="wrap" style="max-width:620px">' +
+        '<h1>This reset link has expired</h1>' +
+        ui.notice('warn', 'Links are valid for 30 minutes',
+          'Request a fresh one from the <a href="#/reset">password reset page</a>.') + '</div>';
+      return;
+    }
+
+    var u = found.user;
+    ctx.el.innerHTML =
+    '<div class="wrap" style="max-width:620px">' +
+      '<h1>Choose a new password</h1>' +
+      '<p class="lede">Setting a new password for <strong>' + esc(u.email) + '</strong>.</p>' +
+      ui.notice('warn', 'Stored in plain text',
+        'This demonstration build keeps passwords unhashed in <code>localStorage</code>. ' +
+        'Do not reuse a password you use anywhere else.') +
+      '<form class="card" id="resetSetForm" novalidate>' +
+        '<div class="field"><label for="npw">New password <span class="req">*</span></label>' +
+          '<input type="password" id="npw" name="password" autocomplete="new-password" required>' +
+          '<p class="field__hint">Minimum 4 characters.</p></div>' +
+        '<div class="field"><label for="npw2">Confirm new password <span class="req">*</span></label>' +
+          '<input type="password" id="npw2" name="confirm" autocomplete="new-password" required></div>' +
+        '<div class="btn-row"><button class="btn btn--primary" type="submit">Set password and sign in</button>' +
+          '<a class="btn btn--ghost" href="#/signin">Cancel</a></div>' +
+      '</form>' +
+    '</div>';
+
+    var f = document.getElementById('resetSetForm');
+    f.addEventListener('submit', function (e) {
+      e.preventDefault();
+      ui.clearAllErrors(f);
+      var pw = f.elements.password.value, pw2 = f.elements.confirm.value;
+      var ok = true;
+      if (pw.length < 4) { ui.fieldError(f.elements.password, 'Use at least 4 characters.'); ok = false; }
+      if (pw !== pw2) { ui.fieldError(f.elements.confirm, 'The two passwords do not match.'); ok = false; }
+      if (!ok) { ui.focusFirstError(f); return; }
+
+      /* Re-check the token at spend time: it may have expired or been used
+         while this form sat open. */
+      var still = store.userByResetToken(token);
+      if (!still || still.expired) {
+        ui.toast('That reset link is no longer valid. Request a new one.', 'err');
+        router.navigate('#/reset');
+        return;
+      }
+
+      store.completePasswordReset(still.user.id, pw);
+      auth.signIn(still.user.email, pw);
+      ui.toast('Password updated. You are signed in.', 'good');
+      router.navigate(auth.isSupervisor() ? '#/dashboard' : '#/me');
     });
   }
 
@@ -267,6 +419,7 @@
 
   ESH.views = ESH.views || {};
   ESH.views.signin = signin;
+  ESH.views.reset = reset;
   ESH.views.register = register;
   ESH.views.denied = denied;
 

@@ -24,6 +24,8 @@
       ['Create / edit a report',                    '—', 'Own, until review begins; and on revisions', 'Any'],
       ['Change workflow status',                    '—', 'Submit / withdraw own', 'All transitions'],
       ['Feature a report in the library',           '—', '—', 'Yes'],
+      ['Reset own password via a reset link',       'Yes', 'Yes', 'Yes'],
+      ['Issue another user a temporary password',   '—', '—', 'Yes'],
       ['Set an intern\'s standing (active / inactive / alumnus)', '—', '—', 'Yes'],
       ['Supervisor dashboard and analytics',        '—', '—', 'Yes']
     ];
@@ -101,6 +103,17 @@
         'Downloads work until you reload, after which the record shows the metadata and says the file is ' +
         'unavailable — silently dropping the upload would have been the worse choice.</p>' +
       '<p>Use <em>Reset demo data</em> in the footer to restore the seeded state at any time.</p>' +
+
+      '<h2>Password reset</h2>' +
+      '<p>Two routes. A researcher can request a reset link at <code>#/reset</code>: a single-use ' +
+        'token with a 30-minute expiry is issued, the response is the same whether or not an ' +
+        'account exists, and the token is invalidated the moment it is spent. <strong>But there is ' +
+        'no mail server</strong>, so the link is shown on the page instead of being emailed — which ' +
+        'means anyone who knows an address can reset that account. That single step is the part a ' +
+        'production build must replace; everything around it is already the right shape.</p>' +
+      '<p>The second route needs no email at all: Prof. Foing can issue a temporary password from ' +
+        'any researcher profile and hand it over directly. For a closed group of this size that is ' +
+        'often the better mechanism, and it is worth keeping even once email works.</p>' +
 
       '<h2>Placeholder content</h2>' +
       '<p>Prof. Foing\'s biography, titles and publication figures are limited to the publicly documented ' +

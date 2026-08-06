@@ -172,7 +172,27 @@ the metadata and states plainly that the file is unavailable. Silently dropping 
 pretending it had been stored, would have been worse.
 
 Other consequences of having no backend: profile photographs are referenced by URL rather than
-uploaded and there is no password reset.
+uploaded, and password reset cannot email you (see below).
+
+### Password reset
+
+Two routes, at `#/reset` and from the supervisor's view of any researcher profile.
+
+**Self-service link.** A researcher enters their address and a single-use token with a 30-minute
+expiry is issued. The response is identical whether or not an account exists, so the form does not
+leak which addresses are registered, and the token is invalidated the moment it is spent — those
+parts are the real thing.
+
+**The part that is not real:** there is no mail server, so the link is rendered on the page instead
+of being sent to the mailbox. That means **anyone who knows an address can reset that account**. It
+is labelled as such on screen in red rather than glossed over. Swapping this one step for a genuine
+emailed token is the single most important change a production build must make; the token lifecycle
+around it is already correct.
+
+**Supervisor-issued temporary password.** Prof. Foing can issue a temporary password from any
+researcher profile and hand it over directly. It is displayed once and replaces the account password
+immediately. This route needs no email at all, and for a closed group of this size it is arguably
+the better mechanism to keep even after email works. Supervisors cannot reset each other.
 
 ---
 

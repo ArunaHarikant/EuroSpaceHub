@@ -429,6 +429,122 @@ ok('valid credentials accepted', ESH.auth.signIn('intern.a@demo.eurospacehub.loc
 /* the removed enquiry block used to leave the session as supervisor */
 ESH.auth.signOut();
 
+/* ================= PASSWORD RESET ================= */
+section('Password reset');
+ESH.auth.signOut();
+
+goto('#/signin');
+ok('sign-in offers a forgotten-password link', /#\/reset/.test(html()));
+
+goto('#/reset');
+ok('reset request form renders', /Reset your password/.test(text()));
+ok('reset page states no email is sent', /No email is sent in this build/.test(text()));
+
+/* unknown address: neutral response, no token, no account enumeration */
+{
+  const f = window.document.getElementById('resetReqForm');
+  f.elements.email.value = 'nobody@example.com';
+  f.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+  const out = window.document.getElementById('resetOut');
+  ok('unknown address gets the neutral message', /Check your inbox/.test(out.textContent));
+  ok('unknown address yields no reset link', !/#\/reset\?token=/.test(out.innerHTML));
+}
+
+/* known address: same neutral message, plus the demo link */
+let resetToken = null;
+{
+  goto('#/reset');
+  const f = window.document.getElementById('resetReqForm');
+  f.elements.email.value = 'intern.a@demo.eurospacehub.local';
+  f.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+  const out = window.document.getElementById('resetOut');
+  ok('known address also gets the neutral message', /Check your inbox/.test(out.textContent));
+  const m = out.innerHTML.match(/#\/reset\?token=([a-z0-9]+)/);
+  ok('a reset token was issued', !!m);
+  resetToken = m && m[1];
+  ok('token is long enough to be unguessable', !!resetToken && resetToken.length >= 20);
+  const u = ESH.store.userByEmail('intern.a@demo.eurospacehub.local');
+  ok('token is stored against the account', u.resetToken === resetToken);
+  ok('token carries an expiry', !!u.resetExpires && new Date(u.resetExpires) > new Date());
+}
+
+goto('#/reset?token=totallybogustoken');
+ok('a bogus token is rejected', /not valid/i.test(text()));
+
+/* spend the token */
+goto('#/reset?token=' + resetToken);
+ok('valid token opens the new-password form', /Choose a new password/.test(text()));
+{
+  const f = window.document.getElementById('resetSetForm');
+  f.elements.password.value = 'abc';
+  f.elements.confirm.value = 'abc';
+  f.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+  ok('short password rejected', /at least 4 characters/.test(view().textContent));
+  f.elements.password.value = 'newpassword1';
+  f.elements.confirm.value = 'mismatch';
+  f.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+  ok('mismatched confirmation rejected', /do not match/.test(view().textContent));
+  f.elements.confirm.value = 'newpassword1';
+  f.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+}
+ok('password was changed', ESH.auth.signIn('intern.a@demo.eurospacehub.local', 'newpassword1').ok === true);
+ok('old password no longer works',
+   ESH.auth.signIn('intern.a@demo.eurospacehub.local', 'demo').ok === false);
+{
+  const u = ESH.store.userByEmail('intern.a@demo.eurospacehub.local');
+  ok('token cleared after use', u.resetToken === undefined);
+  ok('password change is timestamped', !!u.passwordChangedAt);
+}
+ESH.auth.signOut();
+goto('#/reset?token=' + resetToken);
+ok('a spent token cannot be reused', /not valid/i.test(text()));
+
+/* expiry is enforced */
+{
+  const issued = ESH.store.requestPasswordReset('intern.b@demo.eurospacehub.local');
+  const u = ESH.store.userByEmail('intern.b@demo.eurospacehub.local');
+  u.resetExpires = new Date(Date.now() - 1000).toISOString();
+  ESH.store.save();
+  goto('#/reset?token=' + issued.token);
+  ok('an expired token is rejected', /expired/i.test(text()));
+  ok('expired token does not open the form', !window.document.getElementById('resetSetForm'));
+}
+
+/* signed-in users are sent elsewhere */
+ESH.auth.assume('u_i3');
+goto('#/reset');
+ok('signed-in users are not shown the reset form', /already signed in/i.test(text()));
+ESH.auth.signOut();
+
+/* --- supervisor-issued temporary password --- */
+section('Supervisor-issued password');
+ESH.auth.assume('u_i3');
+{
+  const target = ESH.store.userById('u_i4');
+  ok('an intern cannot reset anyone', !ESH.auth.can('user:resetPassword', target));
+}
+ESH.auth.assume(ESH.store.SUPERVISOR_ID);
+{
+  const target = ESH.store.userById('u_i4');
+  ok('supervisor may reset an intern', ESH.auth.can('user:resetPassword', target));
+  ok('supervisor may NOT reset another supervisor',
+     !ESH.auth.can('user:resetPassword', ESH.store.userById('u_cosup')));
+}
+goto('#/researcher/u_i4');
+ok('reset control appears on the supervisor panel', !!window.document.getElementById('issueTempPw'));
+{
+  const temp = ESH.store.issueTemporaryPassword('u_i4');
+  ok('a temporary password is returned', typeof temp === 'string' && temp.length >= 8);
+  ESH.auth.signOut();
+  ok('the temporary password works', ESH.auth.signIn('intern.d@demo.eurospacehub.local', temp).ok === true);
+  ok('the old password no longer works',
+     ESH.auth.signIn('intern.d@demo.eurospacehub.local', 'demo').ok === false);
+}
+ESH.auth.assume('u_i1');
+goto('#/researcher/u_i4');
+ok('interns never see the reset control', !window.document.getElementById('issueTempPw'));
+ESH.auth.signOut();
+
 /* escaping */
 section('Output escaping');
 {

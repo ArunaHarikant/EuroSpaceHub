@@ -126,6 +126,14 @@
         '<textarea id="internalNotes" rows="6" placeholder="Private notes on this researcher…">' + esc(u.internalNotes || '') + '</textarea>' +
         '<p class="field__hint">Visible to supervisors only. Never shown to the researcher.</p></div>' +
       '<button class="btn btn--primary btn--sm" type="button" id="saveSupervisor">Save supervisor fields</button>' +
+      (auth.can('user:resetPassword', u, viewer)
+        ? '<hr><h4>Password</h4>' +
+          '<p class="field__hint" style="margin-top:0">Issue a temporary password and pass it to the ' +
+            'researcher yourself. It is shown once, here, and replaces their current password ' +
+            'immediately. For a closed group this is usually simpler than an emailed reset link.</p>' +
+          '<button class="btn btn--sm btn--danger" type="button" id="issueTempPw">Issue temporary password</button>' +
+          '<div id="tempPwOut"></div>'
+        : '') +
     '</section>';
   }
 
@@ -241,6 +249,26 @@
           }, true);
       });
     });
+
+    /* supervisor: issue a temporary password, shown once */
+    var tempBtn = document.getElementById('issueTempPw');
+    if (tempBtn) {
+      tempBtn.addEventListener('click', function () {
+        if (!auth.can('user:resetPassword', target, viewer)) { ui.toast('Not permitted.', 'err'); return; }
+        ui.confirmDialog('Issue a temporary password',
+          'This immediately replaces ' + target.fullName + '’s current password. They will not be ' +
+          'able to sign in until you give them the new one. It is shown to you once.',
+          'Issue password', function () {
+            var temp = store.issueTemporaryPassword(target.id);
+            document.getElementById('tempPwOut').innerHTML =
+              '<div class="notice notice--warn" style="margin-top:12px"><h4>Temporary password</h4>' +
+              '<p style="margin-bottom:0"><code style="font-size:1.05em">' + esc(temp) + '</code></p>' +
+              '<p class="meta" style="margin:8px 0 0">Give this to the researcher directly. It is not ' +
+              'shown again — reissue if you lose it, and ask them to change it once signed in.</p></div>';
+            ui.toast('Temporary password issued.', 'good');
+          }, true);
+      });
+    }
 
     /* supervisor-only controls */
     var saveBtn = document.getElementById('saveSupervisor');

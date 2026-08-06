@@ -557,6 +557,74 @@
     return rec;
   }
 
+  /* ---------------- password reset ----------------
+     A real deployment emails a single-use token to the address on file. There
+     is no mail server here, so the token is created and stored the same way but
+     the UI has to surface the link itself — which of course means anyone can
+     reset anyone's password in this build. That is called out loudly on screen;
+     see README.md § Password reset. */
+
+  var RESET_TTL_MS = 30 * 60 * 1000;   /* 30 minutes */
+
+  function randomToken() {
+    var out = '', chars = 'abcdefghijkmnpqrstuvwxyz23456789';
+    var buf = new Uint8Array(24);
+    if (global.crypto && global.crypto.getRandomValues) global.crypto.getRandomValues(buf);
+    else for (var j = 0; j < buf.length; j++) buf[j] = Math.floor(Math.random() * 256);
+    for (var i = 0; i < buf.length; i++) out += chars[buf[i] % chars.length];
+    return out;
+  }
+
+  /** Issue a reset token. Returns null when no account matches — callers must
+      still show the same neutral message either way (no account enumeration). */
+  function requestPasswordReset(email) {
+    var u = userByEmail(email);
+    if (!u) return null;
+    u.resetToken = randomToken();
+    u.resetExpires = new Date(Date.now() + RESET_TTL_MS).toISOString();
+    save();
+    return { user: u, token: u.resetToken, expires: u.resetExpires };
+  }
+
+  function userByResetToken(token) {
+    if (!token) return null;
+    var list = getState().users;
+    for (var i = 0; i < list.length; i++) {
+      var u = list[i];
+      if (u.resetToken && u.resetToken === token) {
+        if (new Date(u.resetExpires).getTime() < Date.now()) return { expired: true, user: u };
+        return { expired: false, user: u };
+      }
+    }
+    return null;
+  }
+
+  function completePasswordReset(userId, newPassword) {
+    var u = userById(userId);
+    if (!u) return null;
+    u.password = String(newPassword);
+    delete u.resetToken;
+    delete u.resetExpires;
+    u.passwordChangedAt = nowISO();
+    save();
+    return u;
+  }
+
+  /** Supervisor path: issue a temporary password to hand over out of band.
+      Returned once to the caller and never stored anywhere else in readable
+      form beyond the account record itself (which is plaintext in this stub). */
+  function issueTemporaryPassword(userId) {
+    var u = userById(userId);
+    if (!u) return null;
+    var temp = randomToken().slice(0, 10);
+    u.password = temp;
+    delete u.resetToken;
+    delete u.resetExpires;
+    u.passwordChangedAt = nowISO();
+    save();
+    return temp;
+  }
+
   /* ---------------- exports ---------------- */
 
   global.ESH = global.ESH || {};
@@ -576,6 +644,10 @@
     addUser: addUser, updateUser: updateUser,
     addReport: addReport, updateReport: updateReport,
     setStatus: setStatus, logHistory: logHistory, addComment: addComment,
+
+    requestPasswordReset: requestPasswordReset, userByResetToken: userByResetToken,
+    completePasswordReset: completePasswordReset, issueTemporaryPassword: issueTemporaryPassword,
+    RESET_TTL_MS: RESET_TTL_MS,
 
     putBlob: putBlob, fileHandle: fileHandle
   };

@@ -25,6 +25,7 @@
   router.register('/dashboard',             V.dashboard,   'supervisor');
   router.register('/signin',                V.signin);
   router.register('/register',              V.register);
+  router.register('/reset',                 V.reset);
   router.register('/about-demo',            V.aboutDemo);
   router.register('/denied',                V.denied);
   router.setNotFound(V.notFound);
