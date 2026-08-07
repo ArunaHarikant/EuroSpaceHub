@@ -11,7 +11,6 @@ import { JSDOM, VirtualConsole } from 'jsdom';
 
 const BASE = 'http://localhost:8731/';
 let pass = 0, fail = 0;
-const errors = [];
 
 /* jsdom does not implement window.scrollTo; the router calls it after every
    render. That is a harness limitation, not an application error. */
@@ -22,30 +21,68 @@ function ok(name, cond, extra) {
   else { fail++; console.log('  FAIL  ' + name + (extra ? '  → ' + extra : '')); }
 }
 
-const vc = new VirtualConsole();
-vc.on('jsdomError', e => {
-  const msg = e.stack || e.message;
-  if (!IGNORED.test(msg)) errors.push('jsdomError: ' + msg);
-});
-vc.on('error', (...a) => errors.push('console.error: ' + a.join(' ')));
+async function waitFor(pred, timeoutMs = 6000, stepMs = 15) {
+  const start = Date.now();
+  for (;;) {
+    try { if (pred()) return true; } catch { /* not ready yet */ }
+    if (Date.now() - start >= timeoutMs) return false;
+    await new Promise(r => setTimeout(r, stepMs));
+  }
+}
 
-const dom = await JSDOM.fromURL(BASE, {
-  runScripts: 'dangerously',
-  resources: 'usable',
-  pretendToBeVisual: true,
-  virtualConsole: vc,
-});
-const { window } = dom;
+/* Every view module must have registered its renderer before the walk begins.
+   The page pulls in 15 classic scripts over HTTP; if jsdom's resource loader
+   drops any one of them, that view's `ESH.views.*` is missing and every route
+   using it throws "r.render is not a function" mid-suite. We therefore gate on
+   ALL views being present, and if a script failed to load we retry the whole
+   boot with a fresh jsdom rather than run against a half-loaded page. */
+const REQUIRED_VIEWS = ['foing','library','report','reportEdit','submit','profile',
+  'profileEdit','me','dashboard','signin','register','reset','aboutDemo','denied','notFound'];
 
-await new Promise(res => {
-  if (window.document.readyState === 'complete') return res();
-  window.addEventListener('load', res);
-});
-// scripts are classic + deferred by position; give the boot a tick
-await new Promise(r => setTimeout(r, 300));
+async function bootOnce() {
+  const errs = [];
+  const vc = new VirtualConsole();
+  vc.on('jsdomError', e => { const m = e.stack || e.message; if (!IGNORED.test(m)) errs.push('jsdomError: ' + m); });
+  vc.on('error', (...a) => errs.push('console.error: ' + a.join(' ')));
 
-// jsdom lacks createObjectURL; the store uses it on upload.
-window.URL.createObjectURL = () => 'blob:stub';
+  const dom = await JSDOM.fromURL(BASE, {
+    runScripts: 'dangerously', resources: 'usable', pretendToBeVisual: true, virtualConsole: vc,
+  });
+  const { window } = dom;
+  await new Promise(res => {
+    if (window.document.readyState === 'complete') return res();
+    window.addEventListener('load', res);
+  });
+  window.URL.createObjectURL = () => 'blob:stub';   // jsdom lacks it; store uses it on upload
+
+  const ready = await waitFor(() => {
+    const E = window.ESH;
+    return E && E.store && E.auth && E.router && E.views &&
+      REQUIRED_VIEWS.every(v => typeof E.views[v] === 'function') &&
+      window.document.getElementById('view').children.length > 0;
+  });
+  return { dom, window, errs, ready };
+}
+
+let dom, window, errors;
+{
+  const MAX_ATTEMPTS = 5;
+  let attempt = 0, res;
+  do {
+    res = await bootOnce();
+    attempt++;
+    if (res.ready) break;
+    console.log('  (boot attempt ' + attempt + ' incomplete — a script resource failed to load; retrying)');
+    res.dom.window.close();
+  } while (attempt < MAX_ATTEMPTS);
+
+  if (!res.ready) {
+    console.log('  FATAL: app did not finish booting after ' + attempt + ' attempts');
+    console.log('    captured: ' + (res.errs.slice(0, 8).join(' | ') || 'none'));
+    process.exit(1);
+  }
+  dom = res.dom; window = res.window; errors = res.errs;
+}
 
 const { ESH } = window;
 ok('ESH namespace present', !!ESH);
@@ -465,6 +502,9 @@ let resetToken = null;
   ok('a reset token was issued', !!m);
   resetToken = m && m[1];
   ok('token is long enough to be unguessable', !!resetToken && resetToken.length >= 20);
+  ok('token is exactly 24 characters', !!resetToken && resetToken.length === 24);
+  ok('token uses only the unambiguous alphabet (no l/o/0/1)',
+     !!resetToken && /^[abcdefghijkmnpqrstuvwxyz23456789]+$/.test(resetToken));
   const u = ESH.store.userByEmail('intern.a@demo.eurospacehub.local');
   ok('token is stored against the account', u.resetToken === resetToken);
   ok('token carries an expiry', !!u.resetExpires && new Date(u.resetExpires) > new Date());
@@ -565,6 +605,67 @@ section('Output escaping');
   const st = ESH.store.getState();
   st.reports = st.reports.filter(x => x.id !== r.id);
   ESH.store.save();
+}
+
+/* theme toggle: dark is the default, light is opt-in and persisted */
+section('Theme');
+{
+  const root = window.document.documentElement;
+  const getBtn = () => window.document.getElementById('themeToggle');
+  ESH.auth.signOut();
+  goto('#/');
+  ok('default theme is dark', root.getAttribute('data-theme') === 'dark');
+  ok('theme toggle is present in the header', !!getBtn());
+  getBtn().click();
+  ok('toggling switches to light', root.getAttribute('data-theme') === 'light');
+  ok('light choice is persisted', window.localStorage.getItem('esh.theme') === 'light');
+  goto('#/about-demo');
+  ok('a route still renders under the light theme', /Access control in this build/.test(text()));
+  ok('toggle re-renders with the current theme', !!getBtn());
+  getBtn().click();
+  ok('toggling switches back to dark', root.getAttribute('data-theme') === 'dark');
+  ok('dark choice is persisted', window.localStorage.getItem('esh.theme') === 'dark');
+}
+
+/* orientation & feedback: breadcrumbs, search highlighting, review-queue age */
+section('Orientation & feedback (B4)');
+ESH.store.reset(); ESH.auth.restore();
+{
+  ESH.auth.assume('u_i1');
+  const rel = ESH.store.releasedReports()[0];
+  goto('#/report/' + rel.id);
+  const crumbs = view().querySelector('.crumbs');
+  ok('report detail shows a breadcrumb trail', !!crumbs);
+  ok('breadcrumb links back to the library', !!crumbs && /#\/library/.test(crumbs.innerHTML));
+
+  ESH.auth.assume('u_foing');
+  goto('#/researcher/u_i2');
+  ok('researcher profile shows a breadcrumb', !!view().querySelector('.crumbs'));
+}
+{
+  // highlight() must be escape-safe: text escaped first, terms only ever compiled
+  const h = ESH.ui.highlight('<img src=x onerror=alert(1)> lunar regolith', ['lunar', '<img']);
+  ok('highlight escapes HTML in the text', !/<img/.test(h) && /&lt;img/.test(h));
+  ok('highlight wraps a matched term in <mark>', /<mark>lunar<\/mark>/i.test(h));
+  const probe = window.document.createElement('div'); probe.innerHTML = h;
+  ok('highlight injects no live nodes', probe.querySelectorAll('img,script').length === 0);
+  ok('highlight produced a mark element', probe.querySelectorAll('mark').length >= 1);
+
+  goto('#/library?q=lunar');
+  ok('library marks the searched term', view().querySelectorAll('mark').length >= 1);
+}
+{
+  goto('#/dashboard');
+  ok('dashboard shows review-queue age', /waiting \d+ day|in queue today/.test(text()));
+}
+
+/* query-string parsing: a value may contain '=' and must survive intact */
+section('Router query parsing');
+{
+  window.location.hash = '#/library?token=aGVsbG8=world&area=Lunar';
+  const parsed = ESH.router.parse();
+  ok('value keeps everything after the first =', parsed.query.token === 'aGVsbG8=world');
+  ok('later params still parse', parsed.query.area === 'Lunar');
 }
 
 /* reset */

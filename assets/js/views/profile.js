@@ -64,14 +64,14 @@
 
     if (!list.length) {
       return '<section class="card"><h3>' + esc(heading) + '</h3>' +
-        '<p class="meta" style="margin-bottom:0">' +
+        '<p class="meta mb-0">' +
         (canSeeAll ? 'No records yet.' : 'This researcher has no approved outputs shared with the group.') +
         '</p></section>';
     }
 
     return '<section class="card card--flush">' +
       '<div class="card__head"><h3>' + esc(heading) + '</h3><span class="meta">' + list.length + ' record' + (list.length === 1 ? '' : 's') + '</span></div>' +
-      '<div class="tablewrap" style="border:0;border-radius:0">' +
+      '<div class="tablewrap flush">' +
       '<table class="data"><thead><tr>' +
         '<th scope="col">Title</th><th scope="col">Area</th><th scope="col">Type</th>' +
         (canSeeAll ? '<th scope="col">Status</th>' : '') +
@@ -96,7 +96,7 @@
      auth.can() for editing, auth.canTransition() for withdrawal — so the table
      can never offer an action the workflow would refuse. */
   function rowActions(r, viewer) {
-    var out = '<div class="btn-row" style="flex-wrap:nowrap;gap:6px">' +
+    var out = '<div class="btn-row btn-row--tight">' +
       '<a class="btn btn--sm btn--ghost" href="#/report/' + esc(r.id) + '">Open</a>';
     if (auth.can('report:edit', r, viewer)) {
       out += '<a class="btn btn--sm" href="#/report/' + esc(r.id) + '/edit">Edit</a>';
@@ -110,7 +110,7 @@
   function supervisorPanel(u, viewer) {
     if (!auth.can('user:readInternalNotes', u, viewer)) return '';
     return '' +
-    '<section class="card" style="border-color:rgba(250,178,25,.35)">' +
+    '<section class="card card--flag">' +
       '<h3>Supervisor-only</h3>' +
       '<p class="meta">This panel is rendered only for the supervisor role. The researcher ' +
         'cannot reach it.</p>' +
@@ -128,7 +128,7 @@
       '<button class="btn btn--primary btn--sm" type="button" id="saveSupervisor">Save supervisor fields</button>' +
       (auth.can('user:resetPassword', u, viewer)
         ? '<hr><h4>Password</h4>' +
-          '<p class="field__hint" style="margin-top:0">Issue a temporary password and pass it to the ' +
+          '<p class="field__hint mt-0">Issue a temporary password and pass it to the ' +
             'researcher yourself. It is shown once, here, and replaces their current password ' +
             'immediately. For a closed group this is usually simpler than an emailed reset link.</p>' +
           '<button class="btn btn--sm btn--danger" type="button" id="issueTempPw">Issue temporary password</button>' +
@@ -172,13 +172,15 @@
 
     ctx.el.innerHTML =
     '<div class="wrap">' +
-      (isSelf ? '<p class="eyebrow">Your researcher profile</p>' : '<p class="meta" style="margin-bottom:10px"><a href="#/">&larr; Research Hub</a></p>') +
+      (isSelf
+        ? '<p class="eyebrow">Your researcher profile</p>'
+        : ui.breadcrumbs([{ label: 'Research Hub', href: '#/' }, { label: view.fullName }])) +
 
-      '<div style="display:flex;gap:20px;align-items:flex-start;flex-wrap:wrap;margin-bottom:8px">' +
+      '<div class="profilehead mb-8">' +
         ui.avatar(view, 'lg') +
-        '<div style="flex:1 1 320px">' +
-          '<h1 style="margin-bottom:6px">' + esc(view.fullName) + '</h1>' +
-          '<p class="lede" style="margin-bottom:10px">' + esc(view.researchTopic || 'Researcher') + '</p>' +
+        '<div class="profilehead__body">' +
+          '<h1 class="mb-6">' + esc(view.fullName) + '</h1>' +
+          '<p class="lede mb-10">' + esc(view.researchTopic || 'Researcher') + '</p>' +
           '<div class="reportcard__top">' +
             '<span class="badge badge--role">' + esc(view.role === 'supervisor' ? 'Supervisor' : 'Intern / student researcher') + '</span>' +
             (isSup || isSelf ? ui.standingBadge(view.standing) : '') +
@@ -188,20 +190,20 @@
           ? '<a class="btn" href="#/researcher/' + esc(target.id) + '/edit">Edit profile</a>' : '') +
       '</div>' +
 
-      '<div class="split" style="margin-top:24px">' +
+      '<div class="split mt-24">' +
         '<div>' +
           (view.bio
-            ? '<section class="card" style="margin-bottom:20px"><h3>Biography</h3>' +
-              '<p style="white-space:pre-wrap;margin-bottom:0">' + esc(view.bio) + '</p></section>'
+            ? '<section class="card mb-20"><h3>Biography</h3>' +
+              '<p class="prewrap mb-0">' + esc(view.bio) + '</p></section>'
             : '') +
-          '<div style="margin-bottom:20px">' + reportsPanel(target, viewer, full) + '</div>' +
+          '<div class="mb-20">' + reportsPanel(target, viewer, full) + '</div>' +
           (full ? activityPanel(target, viewer) : '') +
         '</div>' +
 
         '<div>' +
-          '<section class="card" style="margin-bottom:20px">' +
+          '<section class="card mb-20">' +
             '<h3>Details</h3>' +
-            '<dl class="dl" style="grid-template-columns:minmax(90px,110px) minmax(0,1fr)">' +
+            '<dl class="dl dl--narrow">' +
               '<dt>Institution</dt><dd>' + esc(view.institution || '—') + '</dd>' +
               '<dt>Programme</dt><dd>' + esc(view.programme || '—') + '</dd>' +
               '<dt>Supervisor</dt><dd>Prof. Bernard Foing</dd>' +
@@ -214,14 +216,14 @@
             ((view.keywords || []).length ? '<hr>' + ui.tagList(view.keywords, '#/library?q=') : '') +
             (linkItems.length ? '<hr><ul class="linklist">' + linkItems.map(function (l) { return '<li>' + l + '</li>'; }).join('') + '</ul>' : '') +
             (!full
-              ? '<hr><p class="meta" style="margin-bottom:0">Contact details and research-period dates are ' +
+              ? '<hr><p class="meta mb-0">Contact details and research-period dates are ' +
                 'visible only to this researcher and to the supervisor.</p>'
               : '') +
           '</section>' +
 
           (isSelf
-            ? '<section class="card" style="margin-bottom:20px"><h3>Actions</h3>' +
-              '<div style="display:grid;gap:9px">' +
+            ? '<section class="card mb-20"><h3>Actions</h3>' +
+              '<div class="grid-9">' +
                 '<a class="btn btn--primary" href="#/submit">Submit a new report</a>' +
                 '<a class="btn" href="#/researcher/' + esc(target.id) + '/edit">Edit my profile</a>' +
               '</div></section>'
@@ -261,9 +263,9 @@
           'Issue password', function () {
             var temp = store.issueTemporaryPassword(target.id);
             document.getElementById('tempPwOut').innerHTML =
-              '<div class="notice notice--warn" style="margin-top:12px"><h4>Temporary password</h4>' +
-              '<p style="margin-bottom:0"><code style="font-size:1.05em">' + esc(temp) + '</code></p>' +
-              '<p class="meta" style="margin:8px 0 0">Give this to the researcher directly. It is not ' +
+              '<div class="notice notice--warn mt-12"><h4>Temporary password</h4>' +
+              '<p class="mb-0"><code class="fs-105">' + esc(temp) + '</code></p>' +
+              '<p class="meta mt-8 mb-0">Give this to the researcher directly. It is not ' +
               'shown again — reissue if you lose it, and ask them to change it once signed in.</p></div>';
             ui.toast('Temporary password issued.', 'good');
           }, true);
@@ -297,8 +299,8 @@
     var links = target.links || {};
 
     ctx.el.innerHTML =
-    '<div class="wrap" style="max-width:840px">' +
-      '<p class="meta" style="margin-bottom:10px"><a href="#/researcher/' + esc(target.id) + '">&larr; Back to profile</a></p>' +
+    '<div class="wrap wrap--840">' +
+      '<p class="meta mb-10"><a href="#/researcher/' + esc(target.id) + '">&larr; Back to profile</a></p>' +
       '<h1>Edit profile</h1>' +
       (viewer.id !== target.id
         ? ui.notice('info', 'Editing another researcher\'s profile',

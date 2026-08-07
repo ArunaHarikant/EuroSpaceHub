@@ -31,7 +31,7 @@
     ];
 
     ctx.el.innerHTML =
-    '<div class="wrap" style="max-width:900px">' +
+    '<div class="wrap wrap--900">' +
       '<p class="eyebrow">Build notes</p>' +
       '<h1>Access control in this build</h1>' +
 
@@ -128,7 +128,7 @@
   /* ---------------- 404 ---------------- */
 
   function notFound(ctx) {
-    ctx.el.innerHTML = '<div class="wrap" style="max-width:640px">' +
+    ctx.el.innerHTML = '<div class="wrap wrap--640">' +
       '<h1>Page not found</h1>' +
       '<p class="lede">No section of the Research Hub matches <code>' + esc(router.parse().raw) + '</code>.</p>' +
       '<div class="btn-row"><a class="btn btn--primary" href="#/">Hub home</a>' +

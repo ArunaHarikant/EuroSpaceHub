@@ -76,8 +76,6 @@
           '<li><strong>Co-Investigator</strong>, Mars Express High Resolution Stereo Camera (HRSC)</li>' +
           '<li><strong>Research Professor</strong>, VU Amsterdam and Florida Institute of Technology</li>' +
         '</ul>' +
-        '<div class="btn-row">' +
-        '</div>' +
         /* Textual equivalent for the aria-hidden decorative backdrop. */
         '<p class="hero__caption">Backdrop: selected lunar and Mars missions.<br>' +
           '<span class="key key--esa">European (ESA)</span>' +
@@ -108,11 +106,11 @@
           '<p class="meta">Biographical details are limited to the publicly documented record.</p>' +
         '</div>' +
         '<div>' +
-          '<div class="card" style="margin-bottom:20px">' +
+          '<div class="card mb-20">' +
             '<h3>Research focus</h3>' +
             focusTags() +
             (auth.isAuthenticated()
-              ? '<p class="field__hint" style="margin-top:12px">Select a focus area to filter the report library.</p>'
+              ? '<p class="field__hint mt-12">Select a focus area to filter the report library.</p>'
               : '') +
           '</div>' +
           '<div class="card">' +
@@ -137,9 +135,9 @@
       '<div class="section__head"><h2>Affiliations &amp; external resources</h2></div>' +
       '<div class="grid grid--3">' +
         EXTERNAL_LINKS.map(function (l) {
-          return '<a class="card" href="' + esc(l.url) + '" rel="noopener" style="text-decoration:none">' +
-            '<h3 style="margin-bottom:4px">' + esc(l.label) + ' &rarr;</h3>' +
-            '<p class="meta" style="margin:0">' + esc(l.note) + '</p></a>';
+          return '<a class="card link-plain" href="' + esc(l.url) + '" rel="noopener">' +
+            '<h3 class="mb-4">' + esc(l.label) + ' &rarr;</h3>' +
+            '<p class="meta m-0">' + esc(l.note) + '</p></a>';
         }).join('') +
       '</div>' +
     '</section>';
@@ -175,16 +173,16 @@
     }
     return '' +
     '<section class="section">' +
-      '<div class="card" style="text-align:center">' +
+      '<div class="card center">' +
         '<h2>This research hub is private</h2>' +
-        '<p class="lede" style="margin-inline:auto">Research reports, the report library and ' +
+        '<p class="lede mi-auto">Research reports, the report library and ' +
           'researcher profiles are available only to interns currently working with ' +
           'Prof. Foing and to Prof. Foing himself. Nothing on this page is a public archive, ' +
           'and no submitted work is published outside the group.</p>' +
-        '<p class="lede" style="margin-inline:auto">Already placed with Prof. Foing? Sign in, or ' +
+        '<p class="lede mi-auto">Already placed with Prof. Foing? Sign in, or ' +
           'create your researcher account. This hub is not an application route — placements are ' +
           'arranged separately.</p>' +
-        '<div class="btn-row" style="justify-content:center">' +
+        '<div class="btn-row jc-center">' +
           '<a class="btn btn--primary" href="#/signin">Sign in</a>' +
           '<a class="btn" href="#/register">Create a researcher account</a>' +
         '</div>' +

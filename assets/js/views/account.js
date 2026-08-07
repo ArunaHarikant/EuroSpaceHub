@@ -28,7 +28,7 @@
     ];
 
     ctx.el.innerHTML =
-    '<div class="wrap" style="max-width:900px">' +
+    '<div class="wrap wrap--900">' +
       '<h1>Sign in</h1>' +
       '<p class="lede">Access your researcher profile, submissions and — for supervisors — the review dashboard.</p>' +
 
@@ -49,7 +49,7 @@
           '<div class="btn-row"><button class="btn btn--primary" type="submit">Sign in</button>' +
             '<a class="btn btn--ghost" href="#/register">Register instead</a></div>' +
           '<p id="siErr" class="field__err" hidden></p>' +
-          '<p class="field__hint" style="margin-top:14px">' +
+          '<p class="field__hint mt-14">' +
             '<a href="#/reset">Forgotten your password?</a></p>' +
         '</form>' +
 
@@ -57,18 +57,17 @@
           '<h3>Demo role switcher</h3>' +
           '<p class="meta">Assume a role without credentials to explore what each one can see. ' +
             'This bypass exists only because the build is a demonstration.</p>' +
-          '<div style="display:grid;gap:8px;margin-top:12px">' +
+          '<div class="grid-8 mt-12">' +
             demoAccounts.map(function (a) {
               var u = store.userById(a.id);
               if (!u) return '';
-              return '<button class="btn" type="button" data-assume="' + esc(a.id) + '" ' +
-                'style="justify-content:flex-start;text-align:left;height:auto;padding:10px 12px">' +
-                '<span style="display:block"><span style="display:block;color:var(--ink)">' + esc(a.label) + '</span>' +
+              return '<button class="btn btn--menu" type="button" data-assume="' + esc(a.id) + '">' +
+                '<span class="d-block"><span class="d-block text-ink">' + esc(a.label) + '</span>' +
                 '<span class="meta">' + esc(a.sub) + '</span></span></button>';
             }).join('') +
           '</div>' +
           '<hr>' +
-          '<p class="meta" style="margin-bottom:0">Signed out you see only Prof. Foing\'s profile ' +
+          '<p class="meta mb-0">Signed out you see only Prof. Foing\'s profile ' +
             'page and this sign-in screen — no reports, no library, no researcher profiles.</p>' +
         '</div>' +
       '</div>' +
@@ -130,8 +129,8 @@
   /* --- step 1: ask for the address --- */
   function requestReset(ctx) {
     ctx.el.innerHTML =
-    '<div class="wrap" style="max-width:620px">' +
-      '<p class="meta" style="margin-bottom:10px"><a href="#/signin">&larr; Back to sign in</a></p>' +
+    '<div class="wrap wrap--620">' +
+      '<p class="meta mb-10"><a href="#/signin">&larr; Back to sign in</a></p>' +
       '<h1>Reset your password</h1>' +
       '<p class="lede">Enter the institutional email address on your researcher account.</p>' +
 
@@ -149,7 +148,7 @@
           '<a class="btn btn--ghost" href="#/signin">Cancel</a></div>' +
       '</form>' +
 
-      '<div id="resetOut" style="margin-top:20px"></div>' +
+      '<div id="resetOut" class="mt-20"></div>' +
 
       '<hr><p class="meta">Prof. Foing can also issue you a temporary password directly — for a ' +
         'small closed group that is often the simpler route, and it is the one a production build ' +
@@ -193,7 +192,7 @@
             'in your inbox. In a real deployment this page would say &ldquo;check your inbox&rdquo; ' +
             'and the link would exist only in the mailbox for <strong>' + esc(email) + '</strong>.</p>' +
           '<p>The link can be used once and expires in 30 minutes.</p>' +
-          '<p style="margin-bottom:0"><a class="btn btn--primary btn--sm" href="' + esc(link) + '">' +
+          '<p class="mb-0"><a class="btn btn--primary btn--sm" href="' + esc(link) + '">' +
             'Open the reset link</a></p>' +
         '</div>';
     });
@@ -204,7 +203,7 @@
     var found = store.userByResetToken(token);
 
     if (!found) {
-      ctx.el.innerHTML = '<div class="wrap" style="max-width:620px">' +
+      ctx.el.innerHTML = '<div class="wrap wrap--620">' +
         '<h1>This reset link is not valid</h1>' +
         ui.notice('danger', 'Unrecognised or already-used link',
           'Reset links can be used once. Request a new one from the ' +
@@ -212,7 +211,7 @@
       return;
     }
     if (found.expired) {
-      ctx.el.innerHTML = '<div class="wrap" style="max-width:620px">' +
+      ctx.el.innerHTML = '<div class="wrap wrap--620">' +
         '<h1>This reset link has expired</h1>' +
         ui.notice('warn', 'Links are valid for 30 minutes',
           'Request a fresh one from the <a href="#/reset">password reset page</a>.') + '</div>';
@@ -221,7 +220,7 @@
 
     var u = found.user;
     ctx.el.innerHTML =
-    '<div class="wrap" style="max-width:620px">' +
+    '<div class="wrap wrap--620">' +
       '<h1>Choose a new password</h1>' +
       '<p class="lede">Setting a new password for <strong>' + esc(u.email) + '</strong>.</p>' +
       ui.notice('warn', 'Stored in plain text',
@@ -278,7 +277,7 @@
     var sup = store.userById(store.SUPERVISOR_ID);
 
     ctx.el.innerHTML =
-    '<div class="wrap" style="max-width:840px">' +
+    '<div class="wrap wrap--840">' +
       '<p class="eyebrow">Researcher registration</p>' +
       '<h1>Create a researcher profile</h1>' +
       '<p class="lede">For interns and student researchers undertaking a supervised research period ' +
@@ -415,7 +414,7 @@
 
   function denied(ctx) {
     var u = auth.user();
-    ctx.el.innerHTML = '<div class="wrap" style="max-width:680px">' +
+    ctx.el.innerHTML = '<div class="wrap wrap--680">' +
       '<h1>Access denied</h1>' +
       ui.notice('danger', 'You do not have permission to view that page',
         u ? 'You are signed in as <strong>' + esc(u.fullName) + '</strong> (' + esc(u.role) + '). ' +

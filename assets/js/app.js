@@ -9,6 +9,36 @@
       router = ESH.router, V = ESH.views;
   var esc = ui.esc;
 
+  /* ---------------- theme ----------------
+     Dark is the default (the :root tokens). Light is opt-in via this toggle and
+     remembered in localStorage; there is no prefers-color-scheme auto-switch. */
+  var THEME_KEY = 'esh.theme';
+  var ICON_SUN = '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" ' +
+    'stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/>' +
+    '<path d="M12 2.5v2.2M12 19.3v2.2M4.2 4.2l1.6 1.6M18.2 18.2l1.6 1.6M2.5 12h2.2M19.3 12h2.2' +
+    'M4.2 19.8l1.6-1.6M18.2 5.8l1.6-1.6"/></svg>';
+  var ICON_MOON = '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" ' +
+    'stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M20 14.2A8 8 0 1 1 9.8 4 ' +
+    '6.4 6.4 0 0 0 20 14.2z"/></svg>';
+
+  function currentTheme() {
+    try { return global.localStorage.getItem(THEME_KEY) === 'light' ? 'light' : 'dark'; }
+    catch (e) { return 'dark'; }
+  }
+  function applyTheme(theme) {
+    document.documentElement.setAttribute('data-theme', theme);
+    try { global.localStorage.setItem(THEME_KEY, theme); } catch (e) {}
+    var btn = document.getElementById('themeToggle');
+    if (btn) {
+      var toLight = theme === 'dark';
+      btn.innerHTML = toLight ? ICON_SUN : ICON_MOON;
+      var label = toLight ? 'Switch to light theme' : 'Switch to dark theme';
+      btn.setAttribute('aria-label', label);
+      btn.setAttribute('title', label);
+    }
+  }
+  function toggleTheme() { applyTheme(currentTheme() === 'dark' ? 'light' : 'dark'); }
+
   /* ---------------- routes ----------------
      The third argument is the guard requirement enforced in router.resolve()
      via auth.guard(). Guards are a convenience, not the security boundary —
@@ -66,29 +96,32 @@
   function renderSession() {
     var host = document.getElementById('sessionSlot');
     var u = auth.user();
+    var themeBtn = '<button class="btn btn--sm btn--ghost themetoggle" type="button" id="themeToggle"></button>';
     if (!u) {
-      host.innerHTML =
+      host.innerHTML = themeBtn +
         '<a class="btn btn--sm btn--ghost" href="#/signin">Sign in</a>' +
         '<a class="btn btn--sm btn--primary" href="#/register">Register</a>';
-      return;
+    } else {
+      var roleLabel = u.role === 'supervisor'
+        ? (u.id === store.SUPERVISOR_ID ? 'Supervisor' : 'Co-supervisor')
+        : 'Researcher';
+      host.innerHTML = themeBtn +
+        '<span class="sessionchip">' +
+          ui.avatar(u, 'sm') +
+          '<span class="sessionchip__txt">' +
+            '<span class="sessionchip__name">' + esc(u.fullName) + '</span>' +
+            '<span class="sessionchip__role">' + esc(roleLabel) + '</span>' +
+          '</span>' +
+          '<button class="btn btn--sm btn--ghost" type="button" id="signOutBtn">Sign out</button>' +
+        '</span>';
+      document.getElementById('signOutBtn').addEventListener('click', function () {
+        auth.signOut();
+        ui.toast('Signed out. You are now a public visitor.', 'good');
+        router.navigate('#/');
+      });
     }
-    var roleLabel = u.role === 'supervisor'
-      ? (u.id === store.SUPERVISOR_ID ? 'Supervisor' : 'Co-supervisor')
-      : 'Researcher';
-    host.innerHTML =
-      '<span class="sessionchip">' +
-        ui.avatar(u, 'sm') +
-        '<span class="sessionchip__txt">' +
-          '<span class="sessionchip__name">' + esc(u.fullName) + '</span>' +
-          '<span class="sessionchip__role">' + esc(roleLabel) + '</span>' +
-        '</span>' +
-        '<button class="btn btn--sm btn--ghost" type="button" id="signOutBtn">Sign out</button>' +
-      '</span>';
-    document.getElementById('signOutBtn').addEventListener('click', function () {
-      auth.signOut();
-      ui.toast('Signed out. You are now a public visitor.', 'good');
-      router.navigate('#/');
-    });
+    document.getElementById('themeToggle').addEventListener('click', toggleTheme);
+    applyTheme(currentTheme());   /* sync the button icon/label with the active theme */
   }
 
   function renderChrome() {
@@ -139,6 +172,7 @@
   function boot() {
     store.load();
     auth.restore();
+    applyTheme(currentTheme());   /* set <html data-theme> before the first paint */
     wireGlobal();
     renderChrome();
     router.start();
