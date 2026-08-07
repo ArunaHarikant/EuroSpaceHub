@@ -607,6 +607,26 @@ section('Output escaping');
   ESH.store.save();
 }
 
+/* theme toggle: dark is the default, light is opt-in and persisted */
+section('Theme');
+{
+  const root = window.document.documentElement;
+  const getBtn = () => window.document.getElementById('themeToggle');
+  ESH.auth.signOut();
+  goto('#/');
+  ok('default theme is dark', root.getAttribute('data-theme') === 'dark');
+  ok('theme toggle is present in the header', !!getBtn());
+  getBtn().click();
+  ok('toggling switches to light', root.getAttribute('data-theme') === 'light');
+  ok('light choice is persisted', window.localStorage.getItem('esh.theme') === 'light');
+  goto('#/about-demo');
+  ok('a route still renders under the light theme', /Access control in this build/.test(text()));
+  ok('toggle re-renders with the current theme', !!getBtn());
+  getBtn().click();
+  ok('toggling switches back to dark', root.getAttribute('data-theme') === 'dark');
+  ok('dark choice is persisted', window.localStorage.getItem('esh.theme') === 'dark');
+}
+
 /* query-string parsing: a value may contain '=' and must survive intact */
 section('Router query parsing');
 {
