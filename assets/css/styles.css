@@ -505,6 +505,72 @@ table.data td.nowrap { white-space: nowrap; }
 .footer__note { font-size: .78rem !important; font-style: italic; }
 .footer__bar { border-top: 1px solid var(--line); padding-block: 15px; display: flex; justify-content: space-between; gap: 14px; flex-wrap: wrap; color: var(--ink-3); font-size: .8rem; }
 
+/* ==========================================================================
+   Utilities
+   A small, documented layer the view templates use in place of inline
+   `style="…"`. Every value here reproduces exactly what an inline style used
+   to set, so this is a readability refactor with no intended visual change.
+   Declared late so single-class utilities win over the component rules above
+   (e.g. .wrap--620 over .wrap, .toolbar over .card, .dl--narrow over .dl).
+   ========================================================================== */
+
+/* spacing — only the margin steps the views actually use */
+.m-0   { margin: 0; }
+.mt-0  { margin-top: 0; }     .mb-0  { margin-bottom: 0; }
+.mt-8  { margin-top: 8px; }   .mb-4  { margin-bottom: 4px; }
+.mt-10 { margin-top: 10px; }  .mb-6  { margin-bottom: 6px; }
+.mt-12 { margin-top: 12px; }  .mb-8  { margin-bottom: 8px; }
+.mt-14 { margin-top: 14px; }  .mb-10 { margin-bottom: 10px; }
+.mt-18 { margin-top: 18px; }  .mb-12 { margin-bottom: 12px; }
+.mt-20 { margin-top: 20px; }  .mb-14 { margin-bottom: 14px; }
+.mt-24 { margin-top: 24px; }  .mb-20 { margin-bottom: 20px; }
+.mt-26 { margin-top: 26px; }
+.mi-auto { margin-inline: auto; }
+
+/* constrained page widths (override .wrap max-width on forms / detail pages) */
+.wrap--620 { max-width: 620px; }
+.wrap--640 { max-width: 640px; }
+.wrap--680 { max-width: 680px; }
+.wrap--840 { max-width: 840px; }
+.wrap--880 { max-width: 880px; }
+.wrap--900 { max-width: 900px; }
+
+/* text helpers */
+.prewrap  { white-space: pre-wrap; }
+.tnum     { font-variant-numeric: tabular-nums; }
+.text-ink { color: var(--ink); }
+.fs-98    { font-size: .98rem; }
+.fs-105   { font-size: 1.05em; }
+
+/* layout helpers */
+.d-block   { display: block; }
+.jc-center { justify-content: center; }
+.grid-8    { display: grid; gap: 8px; }
+.grid-9    { display: grid; gap: 9px; }
+.bg-1      { background: var(--surface-1); }
+.minw-190  { min-width: 190px; }
+.fb-100    { flex-basis: 100%; }
+.flush     { border: 0; border-radius: 0; }
+.btn-row--tight { flex-wrap: nowrap; gap: 6px; }
+
+/* recurring composites */
+.profilehead        { display: flex; gap: 20px; align-items: flex-start; flex-wrap: wrap; }
+.profilehead__body  { flex: 1 1 320px; }
+.dl--narrow  { grid-template-columns: minmax(90px,110px) minmax(0,1fr); }
+.dl--compact { grid-template-columns: minmax(80px,96px) minmax(0,1fr); font-size: .83rem; }
+.toolbar        { padding: 12px 16px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.toolbar__label { font-size: .85rem; color: var(--ink); }
+.panelsplit { gap: 20px; padding: 6px 2px; }
+.btn--menu  { justify-content: flex-start; text-align: left; height: auto; padding: 10px 12px; }
+.card--flag { border-color: rgba(250,178,25,.35); }
+.link-plain, .link-plain:hover { text-decoration: none; }
+
+/* scrollable multi-select box (co-author picker on the submission form) */
+.pickbox {
+  display: grid; gap: 6px; max-height: 190px; overflow: auto; padding: 10px;
+  border: 1px solid var(--line-strong); border-radius: var(--radius-sm); background: var(--surface-3);
+}
+
 /* ---------- responsive nav ---------- */
 @media (max-width: 1080px) {
   .topbar__toggle { display: block; order: 2; }

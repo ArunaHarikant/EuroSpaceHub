@@ -110,7 +110,7 @@
         '<div class="filters__reset"><button class="btn btn--sm btn--ghost" type="button" id="fReset">Clear filters</button></div>' +
       '</form>' +
 
-      '<p class="meta" role="status" style="margin-bottom:14px">' +
+      '<p class="meta mb-14" role="status">' +
         'Showing <strong>' + results.length + '</strong> of ' + all.length + ' shared record' +
         (all.length === 1 ? '' : 's') + '.</p>' +
 

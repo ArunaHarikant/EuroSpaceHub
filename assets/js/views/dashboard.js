@@ -46,7 +46,7 @@
     '<section class="section">' +
       '<div class="section__head"><h2>Summary</h2>' +
         '<span class="meta">Across all researchers and all workflow states.</span></div>' +
-      '<div class="stats" style="margin-bottom:20px">' +
+      '<div class="stats mb-20">' +
         charts.statTile('Researchers', String(interns.length), activeInterns + ' currently active') +
         charts.statTile('Reports', String(reports.length), featured + ' featured in the library') +
         charts.statTile('Awaiting your action', String(awaiting), 'Submitted or under review') +
@@ -170,42 +170,42 @@
         }).join('')
       : '<p class="meta">No comments on this record yet.</p>';
 
-    return '<tr data-panelrow="' + esc(r.id) + '"><td colspan="' + colspan + '" style="background:var(--surface-1)">' +
-      '<div class="split" style="gap:20px;padding:6px 2px">' +
+    return '<tr data-panelrow="' + esc(r.id) + '"><td class="bg-1" colspan="' + colspan + '">' +
+      '<div class="split panelsplit">' +
         '<div>' +
-          '<h4 style="margin-bottom:10px">Review correspondence</h4>' + thread +
-          '<form data-quickcomment="' + esc(r.id) + '" style="margin-top:14px">' +
-            '<div class="field" style="margin-bottom:10px">' +
+          '<h4 class="mb-10">Review correspondence</h4>' + thread +
+          '<form data-quickcomment="' + esc(r.id) + '" class="mt-14">' +
+            '<div class="field mb-10">' +
               '<label class="sr-only" for="qc_' + esc(r.id) + '">Comment</label>' +
               '<textarea id="qc_' + esc(r.id) + '" name="body" rows="3" placeholder="Feedback for the author…"></textarea></div>' +
-            '<label class="checkline" style="margin-bottom:10px"><input type="checkbox" name="internal">' +
+            '<label class="checkline mb-10"><input type="checkbox" name="internal">' +
               '<span>Internal note — supervisors only.</span></label>' +
             '<button class="btn btn--sm btn--primary" type="submit">Post comment</button>' +
           '</form>' +
         '</div>' +
         '<div>' +
-          '<h4 style="margin-bottom:10px">Record</h4>' +
-          '<dl class="dl" style="grid-template-columns:minmax(80px,96px) minmax(0,1fr);font-size:.83rem">' +
+          '<h4 class="mb-10">Record</h4>' +
+          '<dl class="dl dl--compact">' +
             '<dt>Author</dt><dd>' + esc(store.authorLine(r)) + '</dd>' +
             '<dt>State</dt><dd>' + ui.statusBadge(r.status) + '</dd>' +
             '<dt>Submitted</dt><dd>' + esc(ui.fmtDate(r.submittedAt)) + '</dd>' +
             '<dt>Updated</dt><dd>' + esc(ui.fmtDate(r.updatedAt)) + '</dd>' +
             '<dt>File</dt><dd>' + (r.file ? esc(r.file.name) : '<span class="muted">none</span>') + '</dd>' +
           '</dl>' +
-          '<p class="meta" style="margin-top:10px">' + esc(ui.snippet(r.abstract, 40)) + '</p>' +
+          '<p class="meta mt-10">' + esc(ui.snippet(r.abstract, 40)) + '</p>' +
           '<hr>' +
           (transitions.length
-            ? '<div class="field" style="margin-bottom:10px"><label for="qs_' + esc(r.id) + '">Move to</label>' +
+            ? '<div class="field mb-10"><label for="qs_' + esc(r.id) + '">Move to</label>' +
               '<select id="qs_' + esc(r.id) + '" data-quickstatus="' + esc(r.id) + '">' +
                 transitions.map(function (k) { return '<option value="' + esc(k) + '">' + esc(store.STATUSES[k].label) + '</option>'; }).join('') +
               '</select></div>' +
               '<button class="btn btn--sm btn--primary" type="button" data-applystatus="' + esc(r.id) + '">Apply</button> '
             : '<p class="meta">No transitions available from this state.</p>') +
           (auth.can('report:feature', r, viewer)
-            ? '<label class="checkline" style="margin-top:12px"><input type="checkbox" data-quickfeature="' + esc(r.id) + '"' +
+            ? '<label class="checkline mt-12"><input type="checkbox" data-quickfeature="' + esc(r.id) + '"' +
               (r.featured ? ' checked' : '') + '><span>Featured in the report library</span></label>'
             : '') +
-          '<p style="margin-top:12px;margin-bottom:0"><a class="btn btn--sm" href="#/report/' + esc(r.id) + '">Open full record</a></p>' +
+          '<p class="mt-12 mb-0"><a class="btn btn--sm" href="#/report/' + esc(r.id) + '">Open full record</a></p>' +
         '</div>' +
       '</div>' +
     '</td></tr>';
@@ -248,10 +248,10 @@
         '</div>' +
       '</form>' +
 
-      '<div class="card" style="padding:12px 16px;margin-bottom:14px;display:flex;gap:12px;align-items:center;flex-wrap:wrap">' +
-        '<strong style="font-size:.85rem;color:var(--ink)">Bulk actions</strong>' +
+      '<div class="card toolbar mb-14">' +
+        '<strong class="toolbar__label">Bulk actions</strong>' +
         '<span class="meta" id="selCount">' + selCount + ' selected</span>' +
-        '<select id="bulkStatus" style="min-width:190px" aria-label="Bulk status target">' +
+        '<select id="bulkStatus" class="minw-190" aria-label="Bulk status target">' +
           '<option value="">Move selected to…</option>' +
           bulkTargets.map(function (k) { return '<option value="' + esc(k) + '">' + esc(store.STATUSES[k].label) + '</option>'; }).join('') +
         '</select>' +
@@ -259,10 +259,10 @@
         '<button class="btn btn--sm" type="button" id="bulkFeature"' + (selCount ? '' : ' disabled') + '>Feature selected</button>' +
         '<button class="btn btn--sm" type="button" id="bulkUnfeature"' + (selCount ? '' : ' disabled') + '>Remove featured</button>' +
         '<button class="btn btn--sm btn--ghost" type="button" id="bulkClear"' + (selCount ? '' : ' disabled') + '>Clear selection</button>' +
-        '<span class="meta" style="flex-basis:100%">Transitions that are not legal for a selected record are skipped and reported.</span>' +
+        '<span class="meta fb-100">Transitions that are not legal for a selected record are skipped and reported.</span>' +
       '</div>' +
 
-      '<p class="meta" role="status" style="margin-bottom:10px">Showing <strong>' + rows.length + '</strong> of ' +
+      '<p class="meta mb-10" role="status">Showing <strong>' + rows.length + '</strong> of ' +
         reports.length + ' records.</p>' +
 
       '<div class="tablewrap"><table class="data"><thead><tr>' +
