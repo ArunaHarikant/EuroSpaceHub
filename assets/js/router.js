@@ -32,8 +32,12 @@
     if (qi !== -1) {
       raw.slice(qi + 1).split('&').forEach(function (kv) {
         if (!kv) return;
-        var p = kv.split('=');
-        query[decodeURIComponent(p[0])] = decodeURIComponent((p[1] || '').replace(/\+/g, ' '));
+        /* Split on the FIRST '=' only: a value may itself contain '=' (base64,
+           tokens), and kv.split('=')[1] would silently drop everything after it. */
+        var eq = kv.indexOf('=');
+        var k = eq === -1 ? kv : kv.slice(0, eq);
+        var v = eq === -1 ? '' : kv.slice(eq + 1);
+        query[decodeURIComponent(k)] = decodeURIComponent(v.replace(/\+/g, ' '));
       });
     }
     if (path.length > 1 && path.charAt(path.length - 1) === '/') path = path.slice(0, -1);

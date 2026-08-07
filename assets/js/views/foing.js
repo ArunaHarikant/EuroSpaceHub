@@ -76,8 +76,6 @@
           '<li><strong>Co-Investigator</strong>, Mars Express High Resolution Stereo Camera (HRSC)</li>' +
           '<li><strong>Research Professor</strong>, VU Amsterdam and Florida Institute of Technology</li>' +
         '</ul>' +
-        '<div class="btn-row">' +
-        '</div>' +
         /* Textual equivalent for the aria-hidden decorative backdrop. */
         '<p class="hero__caption">Backdrop: selected lunar and Mars missions.<br>' +
           '<span class="key key--esa">European (ESA)</span>' +

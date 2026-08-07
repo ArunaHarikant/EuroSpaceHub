@@ -567,11 +567,22 @@
   var RESET_TTL_MS = 30 * 60 * 1000;   /* 30 minutes */
 
   function randomToken() {
-    var out = '', chars = 'abcdefghijkmnpqrstuvwxyz23456789';
-    var buf = new Uint8Array(24);
-    if (global.crypto && global.crypto.getRandomValues) global.crypto.getRandomValues(buf);
-    else for (var j = 0; j < buf.length; j++) buf[j] = Math.floor(Math.random() * 256);
-    for (var i = 0; i < buf.length; i++) out += chars[buf[i] % chars.length];
+    var chars = 'abcdefghijkmnpqrstuvwxyz23456789';   /* 31 symbols */
+    /* Reject byte values in the incomplete final block so `% n` is unbiased:
+       31 does not divide 256, so a naive modulo would make the first 8 symbols
+       ~12.5% likelier. limit = floor(256 / n) * n = 248. */
+    var n = chars.length, limit = Math.floor(256 / n) * n;
+    var byte = new Uint8Array(1);
+    function nextByte() {
+      if (global.crypto && global.crypto.getRandomValues) global.crypto.getRandomValues(byte);
+      else byte[0] = Math.floor(Math.random() * 256);
+      return byte[0];
+    }
+    var out = '';
+    while (out.length < 24) {
+      var b = nextByte();
+      if (b < limit) out += chars[b % n];
+    }
     return out;
   }
 
