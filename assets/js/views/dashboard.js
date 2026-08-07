@@ -211,8 +211,22 @@
     '</td></tr>';
   }
 
+  /* How long a record has waited in the review queue. Shown only for the two
+     states that are waiting on the supervisor; emphasised past two weeks. The
+     duration is always spelled out in text, so colour is never the only cue. */
+  function queueAge(r) {
+    if (r.status !== 'submitted' && r.status !== 'review') return '';
+    var d = ui.daysSince(r.submittedAt || r.updatedAt);
+    if (d === null) return '';
+    var text = d === 0 ? 'in queue today' : 'waiting ' + d + ' day' + (d === 1 ? '' : 's');
+    var stale = d >= 14;
+    return '<div class="queueage' + (stale ? ' queueage--stale' : '') + '">' +
+      (stale ? '<strong>' + text + '</strong>' : text) + '</div>';
+  }
+
   function reportTable(reports, interns, f, viewer) {
     var rows = reports.filter(function (r) { return matches(r, f); });
+    var hlTerms = f.q ? f.q.split(/\s+/).filter(Boolean) : null;
     var cmp = SORTS[f.sort] || SORTS.updated;
     rows.sort(function (a, b) { return f.dir === 'asc' ? cmp(a, b) : -cmp(a, b); });
 
@@ -282,11 +296,11 @@
         return '<tr>' +
           '<td class="rowcheck"><input type="checkbox" data-select="' + esc(r.id) + '"' + (selected[r.id] ? ' checked' : '') +
             ' aria-label="Select ' + esc(r.title) + '"></td>' +
-          '<td><a class="rowtitle" href="#/report/' + esc(r.id) + '">' + esc(ui.snippet(r.title, 12)) + '</a>' +
+          '<td><a class="rowtitle" href="#/report/' + esc(r.id) + '">' + ui.highlight(ui.snippet(r.title, 12), hlTerms) + '</a>' +
             (r.featured ? ' ' + ui.featuredBadge() : '') +
             ((r.comments || []).length ? ' <span class="meta">· ' + r.comments.length + ' comment' + (r.comments.length === 1 ? '' : 's') + '</span>' : '') + '</td>' +
           '<td class="nowrap">' + (owner ? '<a href="#/researcher/' + esc(owner.id) + '">' + esc(owner.fullName) + '</a>' : '<span class="muted">—</span>') + '</td>' +
-          '<td class="nowrap">' + ui.statusBadge(r.status) + '</td>' +
+          '<td class="nowrap">' + ui.statusBadge(r.status) + queueAge(r) + '</td>' +
           '<td class="nowrap">' + esc(r.missionArea) + '</td>' +
           '<td class="nowrap">' + esc(r.reportType) + '</td>' +
           '<td class="nowrap meta">' + esc(r.submittedAt ? ui.fmtDate(r.submittedAt) : '—') + '</td>' +

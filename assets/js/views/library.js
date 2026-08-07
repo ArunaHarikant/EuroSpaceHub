@@ -70,6 +70,7 @@
     }).sort(function (a, b) { return a.label.localeCompare(b.label); });
 
     var results = sortReports(all.filter(function (r) { return matches(r, f); }), f.sort);
+    var hlTerms = f.q ? f.q.split(/\s+/).filter(Boolean) : null;
 
     var supHint = auth.isSupervisor()
       ? ui.notice('info', 'You are viewing the shared library',
@@ -115,7 +116,7 @@
         (all.length === 1 ? '' : 's') + '.</p>' +
 
       (results.length
-        ? '<div class="grid grid--2">' + results.map(function (r) { return ui.reportCard(r); }).join('') + '</div>'
+        ? '<div class="grid grid--2">' + results.map(function (r) { return ui.reportCard(r, { highlight: hlTerms }); }).join('') + '</div>'
         : ui.empty('No records match these filters', 'Try widening the mission area, type or year, or clearing the search box.')) +
     '</div>';
 

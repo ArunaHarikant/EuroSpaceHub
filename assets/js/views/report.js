@@ -174,7 +174,11 @@
 
     ctx.el.innerHTML =
     '<div class="wrap">' +
-      '<p class="meta mb-10"><a href="#/library">&larr; Report library</a></p>' +
+      ui.breadcrumbs([
+        { label: 'Research Hub', href: '#/' },
+        { label: 'Report library', href: '#/library' },
+        { label: ui.snippet(r.title, 8) }
+      ]) +
 
       (!released && isPrivileged
         ? ui.notice('warn', 'Not shared with the group',

@@ -627,6 +627,38 @@ section('Theme');
   ok('dark choice is persisted', window.localStorage.getItem('esh.theme') === 'dark');
 }
 
+/* orientation & feedback: breadcrumbs, search highlighting, review-queue age */
+section('Orientation & feedback (B4)');
+ESH.store.reset(); ESH.auth.restore();
+{
+  ESH.auth.assume('u_i1');
+  const rel = ESH.store.releasedReports()[0];
+  goto('#/report/' + rel.id);
+  const crumbs = view().querySelector('.crumbs');
+  ok('report detail shows a breadcrumb trail', !!crumbs);
+  ok('breadcrumb links back to the library', !!crumbs && /#\/library/.test(crumbs.innerHTML));
+
+  ESH.auth.assume('u_foing');
+  goto('#/researcher/u_i2');
+  ok('researcher profile shows a breadcrumb', !!view().querySelector('.crumbs'));
+}
+{
+  // highlight() must be escape-safe: text escaped first, terms only ever compiled
+  const h = ESH.ui.highlight('<img src=x onerror=alert(1)> lunar regolith', ['lunar', '<img']);
+  ok('highlight escapes HTML in the text', !/<img/.test(h) && /&lt;img/.test(h));
+  ok('highlight wraps a matched term in <mark>', /<mark>lunar<\/mark>/i.test(h));
+  const probe = window.document.createElement('div'); probe.innerHTML = h;
+  ok('highlight injects no live nodes', probe.querySelectorAll('img,script').length === 0);
+  ok('highlight produced a mark element', probe.querySelectorAll('mark').length >= 1);
+
+  goto('#/library?q=lunar');
+  ok('library marks the searched term', view().querySelectorAll('mark').length >= 1);
+}
+{
+  goto('#/dashboard');
+  ok('dashboard shows review-queue age', /waiting \d+ day|in queue today/.test(text()));
+}
+
 /* query-string parsing: a value may contain '=' and must survive intact */
 section('Router query parsing');
 {

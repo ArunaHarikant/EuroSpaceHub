@@ -172,7 +172,9 @@
 
     ctx.el.innerHTML =
     '<div class="wrap">' +
-      (isSelf ? '<p class="eyebrow">Your researcher profile</p>' : '<p class="meta mb-10"><a href="#/">&larr; Research Hub</a></p>') +
+      (isSelf
+        ? '<p class="eyebrow">Your researcher profile</p>'
+        : ui.breadcrumbs([{ label: 'Research Hub', href: '#/' }, { label: view.fullName }])) +
 
       '<div class="profilehead mb-8">' +
         ui.avatar(view, 'lg') +

@@ -69,6 +69,27 @@
     return String(s || '').split(/[,;\n]/).map(function (x) { return x.trim(); })
       .filter(function (x) { return x.length; });
   }
+  function daysSince(iso) {
+    if (!iso) return null;
+    var t = new Date(iso).getTime();
+    if (isNaN(t)) return null;
+    return Math.max(0, Math.floor((Date.now() - t) / 86400000));
+  }
+
+  /* Escape-safe search highlighting. The text is escaped FIRST, then matches
+     are wrapped in <mark>; the search terms are only ever compiled into a
+     regex (with specials escaped), never written into the HTML, so a hostile
+     query cannot inject markup. */
+  function highlight(text, terms) {
+    var safeText = esc(text);
+    var list = (terms || []).map(function (t) { return String(t || '').trim(); })
+      .filter(Boolean)
+      .sort(function (a, b) { return b.length - a.length; })
+      .map(function (t) { return t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); });
+    if (!list.length) return safeText;
+    var rx = new RegExp('(' + list.join('|') + ')', 'gi');
+    return safeText.replace(rx, '<mark>$1</mark>');
+  }
 
   /* ---------------- components ---------------- */
 
@@ -110,11 +131,28 @@
       (bodyHtml ? '<p>' + bodyHtml + '</p>' : '') + '</div>';
   }
 
+  /* Breadcrumb trail. items: [{ label, href? }]; the last item is the current
+     page and is never a link. */
+  function breadcrumbs(items) {
+    return '<nav class="crumbs" aria-label="Breadcrumb"><ol>' +
+      items.map(function (it, i) {
+        var last = i === items.length - 1;
+        var inner = (it.href && !last)
+          ? '<a href="' + esc(it.href) + '">' + esc(it.label) + '</a>'
+          : '<span' + (last ? ' aria-current="page"' : '') + '>' + esc(it.label) + '</span>';
+        return '<li>' + inner + '</li>';
+      }).join('') +
+      '</ol></nav>';
+  }
+
   /* Report card used on the Foing feed, the library and intern profiles. */
   function reportCard(r, opts) {
     opts = opts || {};
     var owner = store.userById(r.ownerId);
     var showStatus = !!opts.showStatus;
+    var hl = opts.highlight;   /* optional [terms] to mark in the title/abstract */
+    var title = hl ? highlight(r.title, hl) : esc(r.title);
+    var abs = hl ? highlight(snippet(r.abstract, 34), hl) : esc(snippet(r.abstract, 34));
     return '' +
       '<article class="reportcard' + (r.featured ? ' reportcard--featured' : '') + '">' +
         '<div class="reportcard__top">' +
@@ -123,9 +161,9 @@
           (r.featured ? featuredBadge() : '') +
           (showStatus ? statusBadge(r.status) : '') +
         '</div>' +
-        '<h3><a href="#/report/' + esc(r.id) + '">' + esc(r.title) + '</a></h3>' +
+        '<h3><a href="#/report/' + esc(r.id) + '">' + title + '</a></h3>' +
         '<p class="reportcard__authors">' + esc(store.authorLine(r)) + '</p>' +
-        '<p class="reportcard__abs">' + esc(snippet(r.abstract, 34)) + '</p>' +
+        '<p class="reportcard__abs">' + abs + '</p>' +
         (r.keywords && r.keywords.length ? tagList(r.keywords.slice(0, 4)) : '') +
         '<div class="reportcard__foot">' +
           '<span class="meta">' + esc(fmtDate(r.submittedAt || r.createdAt)) +
@@ -285,6 +323,7 @@
     esc: esc, safeUrl: safeUrl,
     fmtDate: fmtDate, fmtDateTime: fmtDateTime, year: year, fmtBytes: fmtBytes,
     snippet: snippet, wordCount: wordCount, initials: initials, parseList: parseList,
+    daysSince: daysSince, highlight: highlight, breadcrumbs: breadcrumbs,
     statusBadge: statusBadge, standingBadge: standingBadge, featuredBadge: featuredBadge,
     tagList: tagList, avatar: avatar, empty: empty, notice: notice, reportCard: reportCard,
     toast: toast, modal: modal, closeModal: closeModal, confirmDialog: confirmDialog,
