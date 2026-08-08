@@ -72,6 +72,18 @@
     var results = sortReports(all.filter(function (r) { return matches(r, f); }), f.sort);
     var hlTerms = f.q ? f.q.split(/\s+/).filter(Boolean) : null;
 
+    /* pagination */
+    var PAGE_SIZE = 24;
+    var totalPages = Math.max(1, Math.ceil(results.length / PAGE_SIZE));
+    var page = Math.min(totalPages, Math.max(1, parseInt(ctx.query.page, 10) || 1));
+    var pageResults = results.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+    var makeHref = function (n) {
+      return '#/library' + router.buildQuery({
+        q: f.q, area: f.area, type: f.type, author: f.author, year: f.year,
+        sort: f.sort === 'recent' ? '' : f.sort, page: n > 1 ? n : ''
+      });
+    };
+
     var supHint = auth.isSupervisor()
       ? ui.notice('info', 'You are viewing the shared library',
           'This page shows only Approved and Published records — what the rest of the group can see. ' +
@@ -116,7 +128,8 @@
         (all.length === 1 ? '' : 's') + '.</p>' +
 
       (results.length
-        ? '<div class="grid grid--2">' + results.map(function (r) { return ui.reportCard(r, { highlight: hlTerms }); }).join('') + '</div>'
+        ? '<div class="grid grid--2">' + pageResults.map(function (r) { return ui.reportCard(r, { highlight: hlTerms }); }).join('') + '</div>' +
+          ui.pager(page, totalPages, makeHref)
         : ui.empty('No records match these filters', 'Try widening the mission area, type or year, or clearing the search box.')) +
     '</div>';
 

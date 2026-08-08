@@ -647,6 +647,50 @@ ESH.store.reset(); ESH.auth.restore();
 }
 ESH.store.reset(); ESH.auth.restore();
 
+/* pagination + in-place dashboard updates */
+section('Pagination & performance (B6)');
+{
+  const pg = ESH.ui.pager(2, 5, n => '#/library?page=' + n);
+  ok('pager shows current/total', /Page 2 of 5/.test(pg));
+  ok('pager links to adjacent pages', /page=1/.test(pg) && /page=3/.test(pg));
+  ok('pager is empty for a single page', ESH.ui.pager(1, 1, () => '#') === '');
+}
+{
+  ESH.store.reset(); ESH.auth.restore();
+  for (let i = 0; i < 30; i++) {
+    ESH.store.addReport({ ownerId: 'u_i1', title: 'Bulk paginate report ' + i, status: 'published',
+      missionArea: 'Lunar', reportType: 'Poster', abstract: 'placeholder', keywords: [] });
+  }
+  ESH.auth.assume('u_i1');
+  goto('#/library');
+  ok('library caps a page at 24 cards', view().querySelectorAll('.reportcard').length === 24);
+  ok('library shows a pager when overflowing', !!view().querySelector('.pager'));
+  ok('library pager reports multiple pages', /Page 1 of 2/.test(text()));
+  goto('#/library?page=2');
+  const p2 = view().querySelectorAll('.reportcard').length;
+  ok('library page 2 shows the remainder', p2 > 0 && p2 < 24);
+
+  ESH.auth.assume('u_foing');
+  goto('#/dashboard');
+  ok('dashboard caps a page at 25 rows', view().querySelectorAll('tbody [data-panel]').length === 25);
+  ok('dashboard shows a pager', !!view().querySelector('.pager'));
+}
+{
+  ESH.store.reset(); ESH.auth.restore(); ESH.auth.assume('u_foing');
+  goto('#/dashboard');
+  view().querySelector('[data-panel]').click();          /* open a review panel */
+  const qc = view().querySelector('[data-quickcomment]');
+  ok('quick-comment form present with panel open', !!qc);
+  const rid = qc.getAttribute('data-quickcomment');
+  const before = ESH.store.reportById(rid).comments.length;
+  qc.elements.body.value = 'Inline append PROBE';
+  qc.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+  ok('quick comment is persisted', ESH.store.reportById(rid).comments.length === before + 1);
+  ok('panel stays open — appended in place, no navigation', !!view().querySelector('[data-quickcomment]'));
+  ok('the new comment shows without a reload', /Inline append PROBE/.test(text()));
+}
+ESH.store.reset(); ESH.auth.restore();
+
 /* theme toggle: dark is the default, light is opt-in and persisted */
 section('Theme');
 {

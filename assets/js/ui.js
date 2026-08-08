@@ -131,6 +131,20 @@
       (bodyHtml ? '<p>' + bodyHtml + '</p>' : '') + '</div>';
   }
 
+  /* Pager. `makeHref(n)` returns the URL for page n. Renders nothing for a
+     single page. Prev/Next become non-links at the ends. */
+  function pager(current, total, makeHref) {
+    if (total <= 1) return '';
+    var prev = current > 1
+      ? '<a class="btn btn--sm" href="' + esc(makeHref(current - 1)) + '" rel="prev">‹ Prev</a>'
+      : '<span class="btn btn--sm" aria-disabled="true">‹ Prev</span>';
+    var next = current < total
+      ? '<a class="btn btn--sm" href="' + esc(makeHref(current + 1)) + '" rel="next">Next ›</a>'
+      : '<span class="btn btn--sm" aria-disabled="true">Next ›</span>';
+    return '<nav class="pager" aria-label="Pagination">' + prev +
+      '<span class="pager__status">Page ' + current + ' of ' + total + '</span>' + next + '</nav>';
+  }
+
   /* Breadcrumb trail. items: [{ label, href? }]; the last item is the current
      page and is never a link. */
   function breadcrumbs(items) {
@@ -323,7 +337,7 @@
     esc: esc, safeUrl: safeUrl,
     fmtDate: fmtDate, fmtDateTime: fmtDateTime, year: year, fmtBytes: fmtBytes,
     snippet: snippet, wordCount: wordCount, initials: initials, parseList: parseList,
-    daysSince: daysSince, highlight: highlight, breadcrumbs: breadcrumbs,
+    daysSince: daysSince, highlight: highlight, breadcrumbs: breadcrumbs, pager: pager,
     statusBadge: statusBadge, standingBadge: standingBadge, featuredBadge: featuredBadge,
     tagList: tagList, avatar: avatar, empty: empty, notice: notice, reportCard: reportCard,
     toast: toast, modal: modal, closeModal: closeModal, confirmDialog: confirmDialog,
