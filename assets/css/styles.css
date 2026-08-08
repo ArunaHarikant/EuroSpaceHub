@@ -185,6 +185,21 @@ hr { border: 0; border-top: 1px solid var(--line); margin: 1.75rem 0; }
 
 .topbar__session { flex: none; display: flex; align-items: center; gap: 10px; }
 
+/* notification bell + unread count */
+.notifbell {
+  position: relative; display: inline-flex; align-items: center; justify-content: center;
+  width: 36px; height: 32px; flex: none; color: var(--ink-2);
+  border: 1px solid var(--line-strong); border-radius: var(--radius-sm);
+}
+.notifbell:hover { background: var(--surface-3); color: var(--ink); text-decoration: none; }
+.notif-count {
+  position: absolute; top: -6px; right: -6px; min-width: 16px; height: 16px; padding: 0 4px;
+  border-radius: 999px; background: var(--st-critical); color: #fff;
+  font-size: .64rem; font-weight: 700; line-height: 1;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.notif-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); margin-right: 8px; vertical-align: middle; }
+
 /* ---------- sub nav ---------- */
 .subnav { background: var(--surface-2); border-bottom: 1px solid var(--line); position: sticky; top: 64px; z-index: 30; }
 .subnav__inner { display: flex; align-items: center; gap: 2px; overflow-x: auto; scrollbar-width: thin; }

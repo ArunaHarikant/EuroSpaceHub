@@ -502,6 +502,17 @@
     return u;
   }
 
+  /* Marks the point up to which a user has seen their notifications. Anything
+     that happened after this timestamp is "unread". A missing value (never
+     visited) means everything is unread. */
+  function markNotificationsSeen(userId) {
+    var u = userById(userId);
+    if (!u) return null;
+    u.notificationsSeenAt = nowISO();
+    save();
+    return u;
+  }
+
   function addReport(r) {
     var rec = mkReport(Object.assign({
       id: uid('r'), ownerId: '', title: '', missionArea: 'Lunar',
@@ -652,7 +663,7 @@
     reports: reports, reportById: reportById, reportsByOwner: reportsByOwner,
     releasedReports: releasedReports, isReleased: isReleased, authorLine: authorLine,
 
-    addUser: addUser, updateUser: updateUser,
+    addUser: addUser, updateUser: updateUser, markNotificationsSeen: markNotificationsSeen,
     addReport: addReport, updateReport: updateReport,
     setStatus: setStatus, logHistory: logHistory, addComment: addComment,
 

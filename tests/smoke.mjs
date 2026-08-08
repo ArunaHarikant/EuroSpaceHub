@@ -37,7 +37,7 @@ async function waitFor(pred, timeoutMs = 6000, stepMs = 15) {
    ALL views being present, and if a script failed to load we retry the whole
    boot with a fresh jsdom rather than run against a half-loaded page. */
 const REQUIRED_VIEWS = ['foing','library','report','reportEdit','submit','profile',
-  'profileEdit','me','dashboard','signin','register','reset','aboutDemo','denied','notFound'];
+  'profileEdit','me','inbox','dashboard','signin','register','reset','aboutDemo','denied','notFound'];
 
 async function bootOnce() {
   const errs = [];
@@ -606,6 +606,46 @@ section('Output escaping');
   st.reports = st.reports.filter(x => x.id !== r.id);
   ESH.store.save();
 }
+
+/* notifications: a derived "waiting on you" inbox from history + comments */
+section('Notifications (B5)');
+ESH.store.reset(); ESH.auth.restore();
+{
+  const iNotes = ESH.auth.notificationsFor(ESH.store.userById('u_i1'));
+  ok('intern has notifications derived from activity', iNotes.length > 0);
+  ok('intern sees a revisions-requested notification', iNotes.some(n => /Revisions requested/.test(n.text)));
+  ok('intern notifications start unread', iNotes.some(n => n.unread));
+  ok('intern is not notified about other researchers\' reports',
+     iNotes.every(n => ESH.store.reportById(n.reportId).ownerId === 'u_i1'));
+
+  const sNotes = ESH.auth.notificationsFor(ESH.store.userById('u_foing'));
+  ok('supervisor sees new-submission notifications', sNotes.some(n => /submitted .* for review/.test(n.text)));
+
+  const before = ESH.auth.notificationsFor(ESH.store.userById('u_i2')).length;
+  ESH.store.addComment('r_5', 'u_foing', 'internal only', null, true);
+  ok('internal notes do not notify the researcher',
+     ESH.auth.notificationsFor(ESH.store.userById('u_i2')).length === before);
+  ESH.store.addComment('r_5', 'u_foing', 'public feedback', null, false);
+  ok('a public comment notifies the researcher',
+     ESH.auth.notificationsFor(ESH.store.userById('u_i2')).length === before + 1);
+}
+{
+  ESH.store.reset(); ESH.auth.restore(); ESH.auth.assume('u_i1');
+  goto('#/inbox');
+  ok('inbox route renders', /Your inbox/.test(text()));
+  ok('visiting the inbox clears unread',
+     ESH.auth.notificationsFor(ESH.store.userById('u_i1')).every(n => !n.unread));
+  ok('signed-in header shows a notification bell', !!window.document.querySelector('.notifbell'));
+}
+{
+  ESH.store.reset(); ESH.auth.restore();
+  const r = ESH.store.reportById('r_6'); r.title = '<img src=x onerror=alert(1)>XSSN'; ESH.store.save();
+  ESH.auth.assume('u_i1');
+  goto('#/inbox');
+  ok('inbox escapes report titles', view().querySelectorAll('img[onerror]').length === 0);
+  ok('inbox shows the escaped probe text', /XSSN/.test(text()));
+}
+ESH.store.reset(); ESH.auth.restore();
 
 /* theme toggle: dark is the default, light is opt-in and persisted */
 section('Theme');
