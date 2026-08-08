@@ -131,6 +131,30 @@
       (bodyHtml ? '<p>' + bodyHtml + '</p>' : '') + '</div>';
   }
 
+  /* Clickable keyword suggestions that append to a comma-separated input.
+     Render with keywordChips(); wire with wireKeywordChips() after insertion. */
+  function keywordChips(terms, limit) {
+    var list = (terms || []).slice(0, limit || 12);
+    if (!list.length) return '';
+    return '<div class="kwsuggest"><span class="kwsuggest__label">Suggestions:</span> ' +
+      list.map(function (t) {
+        return '<button type="button" class="tag kwsuggest__chip" data-kw="' + esc(t) + '">+ ' + esc(t) + '</button>';
+      }).join(' ') + '</div>';
+  }
+  function wireKeywordChips(container, inputEl) {
+    if (!container || !inputEl) return;
+    container.querySelectorAll('[data-kw]').forEach(function (chip) {
+      chip.addEventListener('click', function () {
+        var kw = chip.getAttribute('data-kw');
+        var cur = parseList(inputEl.value);
+        if (cur.some(function (x) { return x.toLowerCase() === kw.toLowerCase(); })) return;
+        cur.push(kw);
+        inputEl.value = cur.join(', ');
+        inputEl.focus();
+      });
+    });
+  }
+
   /* Pager. `makeHref(n)` returns the URL for page n. Renders nothing for a
      single page. Prev/Next become non-links at the ends. */
   function pager(current, total, makeHref) {
@@ -338,6 +362,7 @@
     fmtDate: fmtDate, fmtDateTime: fmtDateTime, year: year, fmtBytes: fmtBytes,
     snippet: snippet, wordCount: wordCount, initials: initials, parseList: parseList,
     daysSince: daysSince, highlight: highlight, breadcrumbs: breadcrumbs, pager: pager,
+    keywordChips: keywordChips, wireKeywordChips: wireKeywordChips,
     statusBadge: statusBadge, standingBadge: standingBadge, featuredBadge: featuredBadge,
     tagList: tagList, avatar: avatar, empty: empty, notice: notice, reportCard: reportCard,
     toast: toast, modal: modal, closeModal: closeModal, confirmDialog: confirmDialog,

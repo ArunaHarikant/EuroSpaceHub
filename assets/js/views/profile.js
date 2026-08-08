@@ -318,7 +318,10 @@
         '<fieldset><legend>Affiliation &amp; research period</legend>' +
           '<div class="field-row">' +
             '<div class="field"><label for="pInst">Home university or institution</label>' +
-              '<input type="text" id="pInst" name="institution" value="' + esc(target.institution) + '"></div>' +
+              '<input type="text" id="pInst" name="institution" list="instList" value="' + esc(target.institution) + '">' +
+              '<datalist id="instList">' +
+                store.INSTITUTIONS.map(function (i) { return '<option value="' + esc(i) + '"></option>'; }).join('') +
+              '</datalist></div>' +
             '<div class="field"><label for="pProg">Programme</label>' +
               '<input type="text" id="pProg" name="programme" value="' + esc(target.programme) + '"></div>' +
           '</div>' +
@@ -335,7 +338,8 @@
             '<input type="text" id="pTopic" name="researchTopic" value="' + esc(target.researchTopic) + '"></div>' +
           '<div class="field"><label for="pKw">Keywords</label>' +
             '<input type="text" id="pKw" name="keywords" value="' + esc((target.keywords || []).join(', ')) + '">' +
-            '<p class="field__hint">Comma-separated.</p></div>' +
+            '<p class="field__hint">Comma-separated.</p>' +
+            ui.keywordChips(store.suggestedKeywords()) + '</div>' +
           '<div class="field"><label for="pBio">Short biography</label>' +
             '<textarea id="pBio" name="bio" rows="5">' + esc(target.bio) + '</textarea></div>' +
         '</fieldset>' +
@@ -356,6 +360,7 @@
     '</div>';
 
     var form = document.getElementById('profForm');
+    ui.wireKeywordChips(form, form.elements.keywords);
     form.addEventListener('submit', function (e) {
       e.preventDefault();
       ui.clearAllErrors(form);
@@ -374,12 +379,12 @@
       store.updateUser(target.id, {
         fullName: form.elements.fullName.value.trim(),
         email: form.elements.email.value.trim(),
-        institution: form.elements.institution.value.trim(),
+        institution: store.canonicalInstitution(form.elements.institution.value),
         programme: form.elements.programme.value.trim(),
         startDate: form.elements.startDate.value,
         endDate: form.elements.endDate.value,
         researchTopic: form.elements.researchTopic.value.trim(),
-        keywords: ui.parseList(form.elements.keywords.value),
+        keywords: store.canonicalKeywords(ui.parseList(form.elements.keywords.value)),
         bio: form.elements.bio.value.trim(),
         photoUrl: ui.safeUrl(form.elements.photoUrl.value),
         links: {

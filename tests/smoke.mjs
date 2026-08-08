@@ -763,6 +763,59 @@ section('Pagination & performance (B6)');
 }
 ESH.store.reset(); ESH.auth.restore();
 
+/* controlled vocabularies: normalize institutions + keywords, suggest keywords */
+section('Controlled vocabularies (B8)');
+ESH.store.reset(); ESH.auth.restore();
+{
+  ok('institution alias isu → canonical',
+     ESH.store.canonicalInstitution('isu') === 'International Space University');
+  ok('institution alias VU Amsterdam → canonical',
+     ESH.store.canonicalInstitution('VU Amsterdam') === 'Vrije Universiteit Amsterdam');
+  ok('institution matches canonical case-insensitively',
+     ESH.store.canonicalInstitution('florida institute of technology') === 'Florida Institute of Technology');
+  ok('unknown institution passes through trimmed',
+     ESH.store.canonicalInstitution('  Some Random Uni  ') === 'Some Random Uni');
+
+  const kw = ESH.store.canonicalKeywords(['ISRU', 'isru', ' regolith ', 'Regolith', 'south  pole']);
+  ok('keywords dedupe case-insensitively (first spelling kept)',
+     kw.filter(k => k.toLowerCase() === 'isru').length === 1 && kw[0] === 'ISRU');
+  ok('keywords collapse inner whitespace', kw.indexOf('south pole') !== -1);
+
+  const sug = ESH.store.suggestedKeywords();
+  ok('suggested keywords derive from existing reports', sug.length > 0 && sug.some(k => /isru/i.test(k)));
+}
+{
+  ESH.store.reset(); ESH.auth.restore();
+  goto('#/register');
+  ok('register offers a canonical institution datalist', !!window.document.querySelector('#instList option'));
+  ok('register shows keyword suggestion chips', !!window.document.querySelector('.kwsuggest__chip'));
+  const rf = window.document.getElementById('regForm');
+  rf.elements.fullName.value = 'Vocab Test';
+  rf.elements.email.value = 'vocab@demo.eurospacehub.local';
+  rf.elements.password.value = 'demo';
+  rf.elements.institution.value = 'isu';
+  rf.elements.startDate.value = '2026-01-01';
+  rf.elements.researchTopic.value = 'testing vocab';
+  rf.elements.keywords.value = 'ISRU, isru, regolith';
+  rf.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+  const created = ESH.store.userByEmail('vocab@demo.eurospacehub.local');
+  ok('register normalizes the institution on save',
+     !!created && created.institution === 'International Space University');
+  ok('register de-duplicates keywords on save',
+     !!created && created.keywords.filter(k => k.toLowerCase() === 'isru').length === 1);
+}
+{
+  ESH.store.reset(); ESH.auth.restore(); ESH.auth.assume('u_i1');
+  goto('#/submit');
+  const chip = window.document.querySelector('.kwsuggest__chip');
+  ok('submission form shows keyword chips', !!chip);
+  const kwInput = window.document.getElementById('sKw');
+  const kwText = chip.getAttribute('data-kw');
+  chip.click();
+  ok('clicking a chip appends the keyword', kwInput.value.toLowerCase().includes(kwText.toLowerCase()));
+}
+ESH.store.reset(); ESH.auth.restore();
+
 /* theme toggle: dark is the default, light is opt-in and persisted */
 section('Theme');
 {

@@ -61,6 +61,28 @@
 
   var STANDING = ['active', 'inactive', 'alumnus'];
 
+  /* Suggested (not enforced) canonical institutions. Free text is still
+     accepted; these drive the datalists and canonicalInstitution() so the same
+     place isn't spelled three ways across the roster and filters. */
+  var INSTITUTIONS = [
+    'International Space University',
+    'Vrije Universiteit Amsterdam',
+    'Florida Institute of Technology',
+    'ISAE-SUPAERO',
+    'Delft University of Technology',
+    'Technical University of Munich',
+    'University of Strathclyde'
+  ];
+  var INSTITUTION_ALIASES = {
+    'isu': 'International Space University',
+    'vu': 'Vrije Universiteit Amsterdam',
+    'vu amsterdam': 'Vrije Universiteit Amsterdam',
+    'fit': 'Florida Institute of Technology',
+    'florida tech': 'Florida Institute of Technology',
+    'tu delft': 'Delft University of Technology',
+    'tum': 'Technical University of Munich'
+  };
+
   var ACCEPTED_FILES = '.pdf,.docx,.pptx,application/pdf,' +
     'application/vnd.openxmlformats-officedocument.wordprocessingml.document,' +
     'application/vnd.openxmlformats-officedocument.presentationml.presentation';
@@ -481,6 +503,54 @@
   function isReleased(r) { return !!(STATUSES[r.status] && STATUSES[r.status].released); }
   function releasedReports() { return getState().reports.filter(isReleased); }
 
+  /* ---------------- controlled-vocabulary helpers ----------------
+     None of these ENFORCE a closed list — unknown values pass through as free
+     text. They just fold obvious variants together (aliases, casing, spacing)
+     so the roster, filters and library facets don't fragment. */
+
+  function canonicalInstitution(s) {
+    var t = String(s || '').trim();
+    if (!t) return '';
+    var key = t.toLowerCase();
+    if (INSTITUTION_ALIASES[key]) return INSTITUTION_ALIASES[key];
+    for (var i = 0; i < INSTITUTIONS.length; i++) {
+      if (INSTITUTIONS[i].toLowerCase() === key) return INSTITUTIONS[i];
+    }
+    return t;
+  }
+
+  /* Trim, collapse inner whitespace, and drop case-insensitive duplicates
+     (keeping the first spelling seen). */
+  function canonicalKeywords(list) {
+    var seen = {}, out = [];
+    (list || []).forEach(function (k) {
+      var t = String(k || '').replace(/\s+/g, ' ').trim();
+      if (!t) return;
+      var key = t.toLowerCase();
+      if (seen[key]) return;
+      seen[key] = true;
+      out.push(t);
+    });
+    return out;
+  }
+
+  /* Existing keywords across all reports, most-used first — for suggestions. */
+  function suggestedKeywords() {
+    var freq = {};
+    getState().reports.forEach(function (r) {
+      (r.keywords || []).forEach(function (k) {
+        var t = String(k || '').trim();
+        if (!t) return;
+        var key = t.toLowerCase();
+        if (!freq[key]) freq[key] = { label: t, n: 0 };
+        freq[key].n++;
+      });
+    });
+    return Object.keys(freq).map(function (key) { return freq[key]; })
+      .sort(function (a, b) { return b.n - a.n || a.label.localeCompare(b.label); })
+      .map(function (x) { return x.label; });
+  }
+
   /* Display name for a report's author line. */
   function authorLine(r) {
     var owner = userById(r.ownerId);
@@ -664,7 +734,9 @@
     KEY: KEY, SESSION_KEY: SESSION_KEY, SUPERVISOR_ID: SUPERVISOR_ID,
     MISSION_AREAS: MISSION_AREAS, REPORT_TYPES: REPORT_TYPES,
     STATUSES: STATUSES, STATUS_ORDER: STATUS_ORDER, TRANSITIONS: TRANSITIONS,
-    STANDING: STANDING, ACCEPTED_FILES: ACCEPTED_FILES,
+    STANDING: STANDING, ACCEPTED_FILES: ACCEPTED_FILES, INSTITUTIONS: INSTITUTIONS,
+    canonicalInstitution: canonicalInstitution, canonicalKeywords: canonicalKeywords,
+    suggestedKeywords: suggestedKeywords,
 
     load: load, save: save, reset: reset, getState: getState, importState: importState, uid: uid, nowISO: nowISO,
 

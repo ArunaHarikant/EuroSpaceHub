@@ -305,11 +305,9 @@
               '<input type="text" id="rInst" name="institution" list="instList" required ' +
               'placeholder="e.g. International Space University">' +
               '<datalist id="instList">' +
-                '<option value="International Space University"></option>' +
-                '<option value="Vrije Universiteit Amsterdam"></option>' +
-                '<option value="Florida Institute of Technology"></option>' +
+                store.INSTITUTIONS.map(function (i) { return '<option value="' + esc(i) + '"></option>'; }).join('') +
               '</datalist>' +
-              '<p class="field__hint">Free text — any institution.</p></div>' +
+              '<p class="field__hint">Free text — any institution; suggestions help keep spellings consistent.</p></div>' +
             '<div class="field"><label for="rProg">Programme or course</label>' +
               '<input type="text" id="rProg" name="programme" placeholder="e.g. MSc Space Studies"></div>' +
           '</div>' +
@@ -332,7 +330,8 @@
             'placeholder="e.g. Lunar regolith geotechnics"></div>' +
           '<div class="field"><label for="rKw">Keywords</label>' +
             '<input type="text" id="rKw" name="keywords" placeholder="regolith, ISRU, south pole">' +
-            '<p class="field__hint">Comma-separated.</p></div>' +
+            '<p class="field__hint">Comma-separated.</p>' +
+            ui.keywordChips(store.suggestedKeywords()) + '</div>' +
           '<div class="field"><label for="rBio">Short biography</label>' +
             '<textarea id="rBio" name="bio" rows="4" ' +
             'placeholder="A few sentences on your background and what you are working on."></textarea></div>' +
@@ -360,6 +359,7 @@
     '</div>';
 
     var form = document.getElementById('regForm');
+    ui.wireKeywordChips(form, form.elements.keywords);
     form.addEventListener('submit', function (e) {
       e.preventDefault();
       ui.clearAllErrors(form);
@@ -387,13 +387,13 @@
         fullName: form.elements.fullName.value.trim(),
         email: form.elements.email.value.trim(),
         password: form.elements.password.value,
-        institution: form.elements.institution.value.trim(),
+        institution: store.canonicalInstitution(form.elements.institution.value),
         programme: form.elements.programme.value.trim(),
         supervisorId: store.SUPERVISOR_ID,
         startDate: form.elements.startDate.value,
         endDate: form.elements.endDate.value,
         researchTopic: form.elements.researchTopic.value.trim(),
-        keywords: ui.parseList(form.elements.keywords.value),
+        keywords: store.canonicalKeywords(ui.parseList(form.elements.keywords.value)),
         bio: form.elements.bio.value.trim(),
         photoUrl: ui.safeUrl(form.elements.photoUrl.value),
         links: {
