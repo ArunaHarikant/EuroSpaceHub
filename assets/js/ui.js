@@ -196,6 +196,7 @@
         '<div class="reportcard__top">' +
           '<span class="badge">' + esc(r.missionArea) + '</span>' +
           '<span class="badge">' + esc(r.reportType) + '</span>' +
+          (r.campaign ? '<span class="badge badge--campaign" title="Campaign / programme">' + esc(r.campaign) + '</span>' : '') +
           (r.featured ? featuredBadge() : '') +
           (showStatus ? statusBadge(r.status) : '') +
         '</div>' +

@@ -286,6 +286,8 @@ hr { border: 0; border-top: 1px solid var(--line); margin: 1.75rem 0; }
 .badge--inactive  { color: #b8c2d4; border-color: rgba(184,194,212,.30); background: rgba(184,194,212,.07); }
 .badge--alumnus   { color: #b6a4f0; border-color: rgba(144,133,233,.45); background: rgba(144,133,233,.12); }
 .badge--role      { color: var(--accent-hi); border-color: var(--accent-ring); background: var(--accent-dim); }
+.badge--campaign  { color: #b6a4f0; border-color: rgba(144,133,233,.40); background: rgba(144,133,233,.10); }
+:root[data-theme="light"] .badge--campaign { color: #6d28d9; border-color: rgba(109,40,217,.35); background: rgba(109,40,217,.08); }
 
 .tag {
   display: inline-block; font-size: .74rem; padding: 3px 9px; border-radius: 4px;

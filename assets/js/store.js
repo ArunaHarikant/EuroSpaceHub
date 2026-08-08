@@ -83,6 +83,17 @@
     'tum': 'Technical University of Munich'
   };
 
+  /* Optional campaign / programme a report belongs to — a lightweight grouping,
+     not a first-class entity. Example labels drawn from Prof. Foing's real
+     ILEWG context; the field is free text and never enforced. */
+  var CAMPAIGNS = [
+    'EuroMoonMars',
+    'ILEWG analogue field campaign',
+    'ExoGeoLab',
+    'Lunar south-pole study',
+    'Mars analogue programme'
+  ];
+
   var ACCEPTED_FILES = '.pdf,.docx,.pptx,application/pdf,' +
     'application/vnd.openxmlformats-officedocument.wordprocessingml.document,' +
     'application/vnd.openxmlformats-officedocument.presentationml.presentation';
@@ -230,6 +241,7 @@
       title: o.title,
       missionArea: o.missionArea,
       reportType: o.reportType,
+      campaign: o.campaign || '',            /* optional grouping label */
       abstract: o.abstract,
       keywords: o.keywords || [],
       coAuthors: o.coAuthors || [],          /* [{ name, userId|null }] */
@@ -253,7 +265,7 @@
       mkReport({
         id: 'r_1', ownerId: 'u_i1',
         title: 'Sample Lunar Regolith Report — Geotechnical Characterisation of South-Polar Simulants',
-        missionArea: 'Lunar', reportType: 'Research paper',
+        missionArea: 'Lunar', reportType: 'Research paper', campaign: 'EuroMoonMars',
         abstract: 'Placeholder abstract. This sample record demonstrates how an approved research paper appears in the public library. It describes a notional laboratory campaign characterising the shear strength and compaction behaviour of lunar highland regolith simulants under reduced-pressure conditions, and discusses implications for in-situ resource utilisation and surface mobility at the lunar south pole. All content is placeholder text for demonstration purposes and does not represent real research findings.',
         keywords: ['regolith','ISRU','geotechnics','south pole'],
         coAuthors: [{ name: 'Intern Name D', userId: 'u_i4' }, { name: 'External Collaborator', userId: null }],
@@ -279,7 +291,7 @@
       mkReport({
         id: 'r_2', ownerId: 'u_i2',
         title: 'Sample Mars Report — Stereo-Derived Topography of a Placeholder Crater Region',
-        missionArea: 'Mars', reportType: 'Technical report',
+        missionArea: 'Mars', reportType: 'Technical report', campaign: 'Mars analogue programme',
         abstract: 'Placeholder abstract. This sample technical report illustrates a Mars-focused submission. It outlines a notional workflow for deriving digital terrain models from high-resolution stereo imagery, quantifying vertical uncertainty, and comparing the result against an independent laser-altimetry reference. Content is placeholder text and does not represent real results.',
         keywords: ['HRSC','topography','DTM','stereo photogrammetry'],
         coAuthors: [],
@@ -299,7 +311,7 @@
       mkReport({
         id: 'r_3', ownerId: 'u_i3',
         title: 'Sample Analogue Mission Report — Placeholder Habitat Campaign, Environmental Monitoring',
-        missionArea: 'Both', reportType: 'Analogue mission report',
+        missionArea: 'Both', reportType: 'Analogue mission report', campaign: 'EuroMoonMars',
         abstract: 'Placeholder abstract. A sample analogue-mission record covering environmental and life-support monitoring during a notional two-week isolated-habitat campaign, with lessons applicable to both lunar and Martian surface operations. Content is placeholder text for demonstration only.',
         keywords: ['analogue','habitat','life support','human factors'],
         coAuthors: [{ name: 'Intern Name A', userId: 'u_i1' }],
@@ -519,6 +531,25 @@
     return t;
   }
 
+  /* Fold a campaign onto a canonical spelling when it matches one, else keep the
+     free text. */
+  function canonicalCampaign(s) {
+    var t = String(s || '').replace(/\s+/g, ' ').trim();
+    if (!t) return '';
+    var key = t.toLowerCase();
+    for (var i = 0; i < CAMPAIGNS.length; i++) {
+      if (CAMPAIGNS[i].toLowerCase() === key) return CAMPAIGNS[i];
+    }
+    return t;
+  }
+
+  /* Distinct campaigns actually present on reports — drives the library filter. */
+  function campaignsInUse() {
+    var set = {};
+    getState().reports.forEach(function (r) { if (r.campaign) set[r.campaign] = true; });
+    return Object.keys(set).sort();
+  }
+
   /* Trim, collapse inner whitespace, and drop case-insensitive duplicates
      (keeping the first spelling seen). */
   function canonicalKeywords(list) {
@@ -596,7 +627,7 @@
   function addReport(r) {
     var rec = mkReport(Object.assign({
       id: uid('r'), ownerId: '', title: '', missionArea: 'Lunar',
-      reportType: 'Research paper', abstract: '', keywords: [], coAuthors: [],
+      reportType: 'Research paper', campaign: '', abstract: '', keywords: [], coAuthors: [],
       file: null, supplementary: [], dataAvailability: '', status: 'draft',
       featured: false, createdAt: nowISO(), submittedAt: null, updatedAt: nowISO(),
       history: [], comments: []
@@ -735,8 +766,10 @@
     MISSION_AREAS: MISSION_AREAS, REPORT_TYPES: REPORT_TYPES,
     STATUSES: STATUSES, STATUS_ORDER: STATUS_ORDER, TRANSITIONS: TRANSITIONS,
     STANDING: STANDING, ACCEPTED_FILES: ACCEPTED_FILES, INSTITUTIONS: INSTITUTIONS,
+    CAMPAIGNS: CAMPAIGNS,
     canonicalInstitution: canonicalInstitution, canonicalKeywords: canonicalKeywords,
-    suggestedKeywords: suggestedKeywords,
+    suggestedKeywords: suggestedKeywords, canonicalCampaign: canonicalCampaign,
+    campaignsInUse: campaignsInUse,
 
     load: load, save: save, reset: reset, getState: getState, importState: importState, uid: uid, nowISO: nowISO,
 

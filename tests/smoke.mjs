@@ -764,6 +764,42 @@ section('Pagination & performance (B6)');
 }
 ESH.store.reset(); ESH.auth.restore();
 
+/* light campaign grouping */
+section('Campaign grouping (B10)');
+ESH.store.reset(); ESH.auth.restore();
+{
+  ok('canonicalCampaign matches case-insensitively', ESH.store.canonicalCampaign('euromoonmars') === 'EuroMoonMars');
+  ok('canonicalCampaign passes unknown through trimmed', ESH.store.canonicalCampaign('  My Field Trip  ') === 'My Field Trip');
+  const inUse = ESH.store.campaignsInUse();
+  ok('seed reports demonstrate at least two campaigns', inUse.indexOf('EuroMoonMars') !== -1 && inUse.length >= 2);
+}
+{
+  ESH.auth.assume('u_i1');
+  goto('#/library');
+  ok('library offers a campaign filter', !!window.document.getElementById('fcampaign'));
+  ok('library cards show a campaign badge', !!view().querySelector('.badge--campaign'));
+  goto('#/library?campaign=' + encodeURIComponent('EuroMoonMars'));
+  const cards = [...view().querySelectorAll('.reportcard')];
+  ok('campaign filter narrows the library',
+     cards.length > 0 && cards.every(c => /EuroMoonMars/.test(c.textContent)));
+}
+{
+  goto('#/report/r_1');
+  ok('report detail shows the campaign', /Campaign/.test(text()) && /EuroMoonMars/.test(text()));
+}
+{
+  goto('#/submit');
+  ok('submission form has a campaign field', !!window.document.getElementById('sCampaign'));
+  const sf = window.document.getElementById('repForm');
+  sf.elements.title.value = 'Campaign save test';
+  sf.elements.abstract.value = 'placeholder abstract text';
+  sf.elements.campaign.value = 'euromoonmars';
+  sf.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+  const mine = ESH.store.reportsByOwner('u_i1').filter(r => r.title === 'Campaign save test')[0];
+  ok('saved report normalizes the campaign on submit', !!mine && mine.campaign === 'EuroMoonMars');
+}
+ESH.store.reset(); ESH.auth.restore();
+
 /* dashboard analytics: turnaround + submissions over time */
 section('Dashboard analytics (B9)');
 {

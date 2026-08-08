@@ -100,6 +100,13 @@
             '<input type="text" id="sKw" name="keywords" value="' + esc((r.keywords || []).join(', ')) + '" ' +
             'placeholder="regolith, ISRU, south pole"><p class="field__hint">Comma-separated. Used by the library filters.</p>' +
             ui.keywordChips(store.suggestedKeywords()) + '</div>' +
+          '<div class="field"><label for="sCampaign">Campaign / programme</label>' +
+            '<input type="text" id="sCampaign" name="campaign" list="campaignList" value="' + esc(r.campaign || '') + '" ' +
+            'placeholder="Optional — e.g. EuroMoonMars">' +
+            '<datalist id="campaignList">' +
+              store.CAMPAIGNS.map(function (c) { return '<option value="' + esc(c) + '"></option>'; }).join('') +
+            '</datalist>' +
+            '<p class="field__hint">Optional. Groups related work in the library.</p></div>' +
         '</fieldset>' +
 
         '<fieldset><legend>Authorship</legend>' +
@@ -230,6 +237,7 @@
         title: f.elements.title.value.trim(),
         missionArea: f.elements.missionArea.value,
         reportType: f.elements.reportType.value,
+        campaign: store.canonicalCampaign(f.elements.campaign.value),
         abstract: absText,
         keywords: store.canonicalKeywords(ui.parseList(f.elements.keywords.value)),
         coAuthors: coAuthors,
