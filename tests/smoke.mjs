@@ -3,13 +3,37 @@
  * Loads the real page over HTTP in jsdom, walks every route as each role, and
  * asserts on both rendered output and the permission rules.
  *
- *   python -m http.server 8731     # from the project root, in one terminal
  *   npm install jsdom              # one dependency, test-only
- *   node tests/smoke.mjs           # in another
+ *   node tests/smoke.mjs           # self-hosts its own server; nothing else needed
+ *
+ * The suite starts its own Node HTTP server (keep-alive, so jsdom's ~17
+ * concurrent script fetches reuse a handful of sockets) instead of relying on
+ * `python -m http.server`, whose HTTP/1.0 socket-per-request behaviour made the
+ * loader drop scripts under repeated runs.
  */
 import { JSDOM, VirtualConsole } from 'jsdom';
+import { createServer } from 'node:http';
+import { readFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
+import { dirname, join, normalize } from 'node:path';
 
-const BASE = 'http://localhost:8731/';
+const ROOT = normalize(join(dirname(fileURLToPath(import.meta.url)), '..'));
+const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.mjs': 'text/javascript',
+  '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml' };
+
+const server = createServer(async (req, res) => {
+  try {
+    let p = decodeURIComponent(req.url.split('?')[0]);
+    if (p === '/') p = '/index.html';
+    const full = normalize(join(ROOT, p));
+    if (!full.startsWith(ROOT)) { res.writeHead(403); res.end(); return; }
+    const buf = await readFile(full);
+    res.writeHead(200, { 'Content-Type': MIME[full.slice(full.lastIndexOf('.'))] || 'application/octet-stream' });
+    res.end(buf);
+  } catch { res.writeHead(404); res.end('not found'); }
+});
+await new Promise(r => server.listen(0, '127.0.0.1', r));
+const BASE = 'http://127.0.0.1:' + server.address().port + '/';
 let pass = 0, fail = 0;
 
 /* jsdom does not implement window.scrollTo; the router calls it after every
@@ -57,7 +81,7 @@ async function bootOnce() {
 
   const ready = await waitFor(() => {
     const E = window.ESH;
-    return E && E.store && E.auth && E.router && E.views &&
+    return E && E.store && E.auth && E.router && E.exporter && E.views &&
       REQUIRED_VIEWS.every(v => typeof E.views[v] === 'function') &&
       window.document.getElementById('view').children.length > 0;
   });
@@ -647,6 +671,54 @@ ESH.store.reset(); ESH.auth.restore();
 }
 ESH.store.reset(); ESH.auth.restore();
 
+/* export & citations */
+section('Export & citations (B7)');
+ESH.store.reset(); ESH.auth.restore();
+{
+  const r = ESH.store.reportById('r_1');
+  const bib = ESH.exporter.citation(r, 'bibtex');
+  ok('bibtex has an entry, title and year',
+     /@techreport\{eshub_r_1/.test(bib) && bib.includes(r.title) && /year\s*=\s*\{\d{4}\}/.test(bib));
+  const ris = ESH.exporter.citation(r, 'ris');
+  ok('ris has type, author and terminator', /TY {2}- RPRT/.test(ris) && /AU {2}- /.test(ris) && /ER {2}- /.test(ris));
+  const apa = ESH.exporter.citation(r, 'apa');
+  ok('apa has the title and supervisor line', apa.includes(r.title) && /supervised by Prof\. Bernard Foing/.test(apa));
+
+  const csv = ESH.exporter.toCSV(['A', 'B'], [['x,y', 'a"b'], ['plain', 'ok']]);
+  ok('csv quotes commas and doubles quotes', /"x,y","a""b"/.test(csv) && /^A,B/.test(csv));
+}
+{
+  const snapshot = JSON.parse(JSON.stringify(ESH.store.getState()));
+  const before = ESH.store.reports().length;
+  ESH.store.addReport({ ownerId: 'u_i1', title: 'temp import test', status: 'draft',
+    missionArea: 'Lunar', reportType: 'Poster', abstract: 'x' });
+  ok('store changed before import', ESH.store.reports().length === before + 1);
+  ok('importState restores a snapshot',
+     ESH.store.importState(snapshot) === true && ESH.store.reports().length === before);
+  ok('importState rejects a bad shape', ESH.store.importState({ version: 2 }) === false);
+}
+{
+  ESH.store.reset(); ESH.auth.restore(); ESH.auth.assume('u_i1');
+  const rel = ESH.store.releasedReports()[0];
+  goto('#/report/' + rel.id);
+  const citeBtn = window.document.getElementById('citeBtn');
+  ok('report page has a Cite control', !!citeBtn);
+  citeBtn.click();
+  const out = window.document.getElementById('citeOut');
+  ok('cite modal opens with a citation', !!out && /supervised by/.test(out.value));
+  const fmt = window.document.getElementById('citeFmt');
+  fmt.value = 'bibtex'; fmt.dispatchEvent(new window.Event('change', { bubbles: true }));
+  ok('cite modal switches to BibTeX', /@techreport/.test(out.value));
+  ESH.ui.closeModal();
+
+  goto('#/library');
+  ok('library offers CSV export', !!window.document.getElementById('expCsv'));
+  ok('library offers BibTeX export', !!window.document.getElementById('expBib'));
+  ok('footer has an export-data control', !!window.document.getElementById('exportData'));
+  ok('footer has an import-data control', !!window.document.getElementById('importData'));
+}
+ESH.store.reset(); ESH.auth.restore();
+
 /* pagination + in-place dashboard updates */
 section('Pagination & performance (B6)');
 {
@@ -768,4 +840,5 @@ if (errors.length) {
   console.log('  no runtime errors captured');
 }
 console.log('=====================================');
+server.close();
 process.exit(fail || errors.length ? 1 : 0);

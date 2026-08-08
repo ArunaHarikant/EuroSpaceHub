@@ -440,6 +440,16 @@
 
   function getState() { return state || load(); }
 
+  /* Replace all data with a previously exported object. Validates the shape
+     before committing so a malformed file cannot corrupt the store. Returns
+     true on success. */
+  function importState(obj) {
+    if (!obj || obj.version !== 1 || !Array.isArray(obj.users) || !Array.isArray(obj.reports)) return false;
+    state = { version: 1, seededAt: obj.seededAt || nowISO(), users: obj.users, reports: obj.reports };
+    save();
+    return true;
+  }
+
   /* ---------------- queries ---------------- */
 
   function users()   { return getState().users.slice(); }
@@ -656,7 +666,7 @@
     STATUSES: STATUSES, STATUS_ORDER: STATUS_ORDER, TRANSITIONS: TRANSITIONS,
     STANDING: STANDING, ACCEPTED_FILES: ACCEPTED_FILES,
 
-    load: load, save: save, reset: reset, getState: getState, uid: uid, nowISO: nowISO,
+    load: load, save: save, reset: reset, getState: getState, importState: importState, uid: uid, nowISO: nowISO,
 
     users: users, interns: interns, supervisors: supervisors,
     userById: userById, userByEmail: userByEmail,

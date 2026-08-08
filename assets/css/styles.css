@@ -541,6 +541,8 @@ mark { background: rgba(250,178,25,.28); color: inherit; border-radius: 3px; pad
 .linklist a:hover { color: var(--accent-hi); }
 .footer__note { font-size: .78rem !important; font-style: italic; }
 .footer__bar { border-top: 1px solid var(--line); padding-block: 15px; display: flex; justify-content: space-between; gap: 14px; flex-wrap: wrap; color: var(--ink-3); font-size: .8rem; }
+.footer__tools { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.footer__tools .linkbtn { cursor: pointer; }
 
 /* ==========================================================================
    Utilities

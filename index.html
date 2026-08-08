@@ -109,7 +109,11 @@
   </div>
   <div class="wrap footer__bar">
     <span>&copy; <span id="yr"></span> EuroSpaceHub — Research Hub module</span>
-    <button class="linkbtn" type="button" id="resetData">Reset demo data</button>
+    <span class="footer__tools">
+      <button class="linkbtn" type="button" id="exportData">Export data (JSON)</button>
+      <label class="linkbtn" for="importData">Import data<input id="importData" type="file" accept="application/json,.json" hidden></label>
+      <button class="linkbtn" type="button" id="resetData">Reset demo data</button>
+    </span>
   </div>
 </footer>
 
@@ -120,6 +124,7 @@
 <script src="assets/js/store.js"></script>
 <script src="assets/js/auth.js"></script>
 <script src="assets/js/ui.js"></script>
+<script src="assets/js/export.js"></script>
 <script src="assets/js/charts.js"></script>
 <script src="assets/js/backdrop.js"></script>
 <script src="assets/js/router.js"></script>

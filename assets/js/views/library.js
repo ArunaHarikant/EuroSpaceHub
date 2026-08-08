@@ -128,6 +128,14 @@
         (all.length === 1 ? '' : 's') + '.</p>' +
 
       (results.length
+        ? '<div class="btn-row mb-14">' +
+            '<button class="btn btn--sm" type="button" id="expCsv">Export CSV</button>' +
+            '<button class="btn btn--sm" type="button" id="expBib">Export BibTeX</button>' +
+            '<span class="meta">Exports the ' + results.length + ' record' + (results.length === 1 ? '' : 's') + ' matching your current filters.</span>' +
+          '</div>'
+        : '') +
+
+      (results.length
         ? '<div class="grid grid--2">' + pageResults.map(function (r) { return ui.reportCard(r, { highlight: hlTerms }); }).join('') + '</div>' +
           ui.pager(page, totalPages, makeHref)
         : ui.empty('No records match these filters', 'Try widening the mission area, type or year, or clearing the search box.')) +
@@ -149,6 +157,15 @@
     var t;
     form.elements.q.addEventListener('input', function () { clearTimeout(t); t = setTimeout(apply, 320); });
     document.getElementById('fReset').addEventListener('click', function () { router.navigate('#/library'); });
+
+    var expCsv = document.getElementById('expCsv');
+    if (expCsv) expCsv.addEventListener('click', function () {
+      ESH.exporter.download('eurospacehub-library.csv', 'text/csv', ESH.exporter.reportsCSV(results));
+    });
+    var expBib = document.getElementById('expBib');
+    if (expBib) expBib.addEventListener('click', function () {
+      ESH.exporter.download('eurospacehub-library.bib', 'application/x-bibtex', ESH.exporter.reportsBibtex(results));
+    });
   }
 
   ESH.views = ESH.views || {};

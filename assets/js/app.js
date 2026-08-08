@@ -175,6 +175,41 @@
           router.navigate('#/');
         }, true);
     });
+
+    /* Export the whole store as a JSON file the visitor can keep or move to
+       another browser (the store otherwise lives only in this one). */
+    document.getElementById('exportData').addEventListener('click', function () {
+      ESH.exporter.download('eurospacehub-data.json', 'application/json',
+        JSON.stringify(store.getState(), null, 2));
+    });
+
+    /* Import replaces everything, so it is gated behind a confirm and the shape
+       is validated in store.importState(). */
+    var importInput = document.getElementById('importData');
+    importInput.addEventListener('change', function () {
+      var file = importInput.files && importInput.files[0];
+      if (!file) return;
+      var reader = new global.FileReader();
+      reader.onload = function () {
+        var obj;
+        try { obj = JSON.parse(reader.result); }
+        catch (e) { ui.toast('That file is not valid JSON.', 'err'); importInput.value = ''; return; }
+        ui.confirmDialog('Import data',
+          'This replaces every account, report and comment in this browser with the contents of the file. ' +
+          'This cannot be undone. Consider exporting first.',
+          'Replace all data', function () {
+            if (store.importState(obj)) {
+              auth.signOut();
+              ui.toast('Data imported.', 'good');
+              router.navigate('#/');
+            } else {
+              ui.toast('That file is not a valid hub export.', 'err');
+            }
+          }, true);
+        importInput.value = '';
+      };
+      reader.readAsText(file);
+    });
   }
 
   /* ---------------- boot ---------------- */
