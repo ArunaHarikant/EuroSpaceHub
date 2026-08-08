@@ -98,7 +98,8 @@
               '<span id="absCount" class="tnum"></span></p></div>' +
           '<div class="field"><label for="sKw">Keywords</label>' +
             '<input type="text" id="sKw" name="keywords" value="' + esc((r.keywords || []).join(', ')) + '" ' +
-            'placeholder="regolith, ISRU, south pole"><p class="field__hint">Comma-separated. Used by the library filters.</p></div>' +
+            'placeholder="regolith, ISRU, south pole"><p class="field__hint">Comma-separated. Used by the library filters.</p>' +
+            ui.keywordChips(store.suggestedKeywords()) + '</div>' +
         '</fieldset>' +
 
         '<fieldset><legend>Authorship</legend>' +
@@ -160,6 +161,7 @@
   function wire(ctx, r, isEdit, owner) {
     var viewer = auth.user();
     var f = document.getElementById('repForm');
+    ui.wireKeywordChips(f, f.elements.keywords);
     var abs = document.getElementById('sAbs');
     var count = document.getElementById('absCount');
     var pendingFile = null;
@@ -229,7 +231,7 @@
         missionArea: f.elements.missionArea.value,
         reportType: f.elements.reportType.value,
         abstract: absText,
-        keywords: ui.parseList(f.elements.keywords.value),
+        keywords: store.canonicalKeywords(ui.parseList(f.elements.keywords.value)),
         coAuthors: coAuthors,
         supplementary: supplementary,
         dataAvailability: f.elements.dataAvailability.value.trim()

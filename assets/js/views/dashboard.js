@@ -230,6 +230,18 @@
     var cmp = SORTS[f.sort] || SORTS.updated;
     rows.sort(function (a, b) { return f.dir === 'asc' ? cmp(a, b) : -cmp(a, b); });
 
+    /* pagination */
+    var PAGE_SIZE = 25;
+    var totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+    var page = Math.min(totalPages, Math.max(1, parseInt(f.page, 10) || 1));
+    var pageRows = rows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+    var makeHref = function (n) {
+      return '#/dashboard' + router.buildQuery({
+        q: f.q, status: f.status, area: f.area, type: f.type, intern: f.intern,
+        sort: f.sort, dir: f.dir, bucket: f.bucket, page: n > 1 ? n : ''
+      });
+    };
+
     var COLS = 9;
     var selCount = Object.keys(selected).filter(function (k) { return selected[k]; }).length;
 
@@ -276,8 +288,13 @@
         '<span class="meta fb-100">Transitions that are not legal for a selected record are skipped and reported.</span>' +
       '</div>' +
 
-      '<p class="meta mb-10" role="status">Showing <strong>' + rows.length + '</strong> of ' +
-        reports.length + ' records.</p>' +
+      '<p class="meta mb-10" role="status">' +
+        (rows.length
+          ? 'Showing <strong>' + ((page - 1) * PAGE_SIZE + 1) + '–' + Math.min(page * PAGE_SIZE, rows.length) +
+            '</strong> of ' + rows.length + ' matching' +
+            (rows.length !== reports.length ? ' (of ' + reports.length + ' total)' : '') + '.'
+          : '0 of ' + reports.length + ' records match these filters.') +
+      '</p>' +
 
       '<div class="tablewrap"><table class="data"><thead><tr>' +
         '<th scope="col" class="rowcheck"><input type="checkbox" id="checkAll" aria-label="Select all shown"></th>' +
@@ -290,7 +307,7 @@
         th('updated', 'Updated', f) +
         '<th scope="col">Review</th>' +
       '</tr></thead><tbody>' +
-      (rows.length ? rows.map(function (r) {
+      (rows.length ? pageRows.map(function (r) {
         var owner = store.userById(r.ownerId);
         var open = openPanel === r.id;
         return '<tr>' +
@@ -310,6 +327,7 @@
         '</tr>' + (open ? feedbackPanel(r, viewer, COLS) : '');
       }).join('') : '<tr><td colspan="' + COLS + '" class="muted">No records match these filters.</td></tr>') +
       '</tbody></table></div>' +
+      ui.pager(page, totalPages, makeHref) +
     '</section>';
   }
 
@@ -330,7 +348,8 @@
       intern: ctx.query.intern || 'all',
       sort:   ctx.query.sort   || 'updated',
       dir:    ctx.query.dir    || 'desc',
-      bucket: ctx.query.bucket || ''
+      bucket: ctx.query.bucket || '',
+      page:   ctx.query.page   || '1'
     };
 
     ctx.el.innerHTML =
@@ -356,6 +375,15 @@
       };
       Object.keys(patch).forEach(function (k) { q[k] = patch[k]; });
       router.navigate('#/dashboard' + router.buildQuery(q));
+    }
+
+    /* Re-render the current view in place while keeping the scroll position —
+       the router otherwise jumps to the top after every resolve(). Used for
+       in-page actions (status, bulk, opening a panel) rather than navigation. */
+    function resolveKeepScroll() {
+      var y = global.scrollY || 0;
+      router.resolve();
+      if (typeof global.scrollTo === 'function') global.scrollTo(0, y);
     }
 
     var form = document.getElementById('dashFilters');
@@ -399,7 +427,7 @@
       refreshSelUI(ctx);
     });
     document.getElementById('bulkClear').addEventListener('click', function () {
-      selected = {}; router.resolve();
+      selected = {}; resolveKeepScroll();
     });
 
     /* bulk status */
@@ -423,7 +451,7 @@
           selected = {};
           ui.toast(legal.length + ' record' + (legal.length === 1 ? '' : 's') + ' updated' +
                    (skipped ? '; ' + skipped + ' skipped.' : '.'), 'good');
-          router.resolve();
+          resolveKeepScroll();
         });
     });
 
@@ -442,7 +470,7 @@
       ui.toast(done + ' record' + (done === 1 ? '' : 's') + (on ? ' featured' : ' unfeatured') +
         (skipped ? '; ' + skipped + ' skipped (only approved or published records can be featured).' : '.'),
         skipped ? 'err' : 'good');
-      router.resolve();
+      resolveKeepScroll();
     }
     document.getElementById('bulkFeature').addEventListener('click', function () { bulkFeature(true); });
     document.getElementById('bulkUnfeature').addEventListener('click', function () { bulkFeature(false); });
@@ -452,7 +480,7 @@
       b.addEventListener('click', function () {
         var id = b.getAttribute('data-panel');
         openPanel = (openPanel === id) ? null : id;
-        router.resolve();
+        resolveKeepScroll();
       });
     });
 
@@ -464,9 +492,22 @@
         if (!body) { ui.fieldError(fm.elements.body, 'Enter a comment.'); return; }
         var r = store.reportById(id);
         if (!auth.can('comment:write', r, viewer)) { ui.toast('Not permitted.', 'err'); return; }
-        store.addComment(id, viewer.id, body, null, fm.elements.internal.checked);
-        ui.toast(fm.elements.internal.checked ? 'Internal note added.' : 'Comment posted.', 'good');
-        router.resolve();
+        var internal = fm.elements.internal.checked;
+        store.addComment(id, viewer.id, body, null, internal);
+        /* Append the new comment in place — no full re-render, so the open panel
+           and the scroll position are preserved. */
+        var container = fm.parentNode;
+        var placeholder = container.querySelector(':scope > p.meta');
+        if (placeholder) placeholder.remove();
+        fm.insertAdjacentHTML('beforebegin',
+          '<div class="comment' + (internal ? ' comment--internal' : '') + '">' +
+            '<div class="comment__head"><span class="comment__who">' + esc(viewer.fullName) + '</span>' +
+            (internal ? '<span class="badge badge--featured">Internal</span>' : '') +
+            '<span class="comment__when">' + esc(ui.fmtDateTime(store.nowISO())) + '</span></div>' +
+            '<p class="comment__body">' + esc(body) + '</p>' +
+          '</div>');
+        fm.reset();
+        ui.toast(internal ? 'Internal note added.' : 'Comment posted.', 'good');
       });
     });
 
@@ -479,7 +520,7 @@
         if (!auth.canTransition(r, sel.value, viewer)) { ui.toast('That transition is not permitted.', 'err'); return; }
         store.setStatus(id, sel.value, viewer.id, 'Changed from the dashboard.');
         ui.toast('Moved to ' + store.STATUSES[sel.value].label + '.', 'good');
-        router.resolve();
+        resolveKeepScroll();
       });
     });
 

@@ -195,6 +195,7 @@
 
       '<h1>' + esc(r.title) + '</h1>' +
       '<p class="lede fs-98">' + esc(store.authorLine(r)) + '</p>' +
+      '<div class="btn-row"><button class="btn btn--sm" type="button" id="citeBtn">Cite this record</button></div>' +
 
       '<div class="split mt-26">' +
         '<div>' +
@@ -254,7 +255,51 @@
       '</div>' +
     '</div>';
 
+    document.getElementById('citeBtn').addEventListener('click', function () { openCiteModal(r); });
     if (isPrivileged) wire(r, viewer, ctx);
+  }
+
+  /* Cite modal — pick a format, copy or download. The citation text is set as a
+     textarea .value (not innerHTML), so a hostile title cannot inject markup. */
+  function openCiteModal(r) {
+    ui.modal({
+      title: 'Cite this record',
+      cancelLabel: 'Close',
+      body:
+        '<div class="field"><label for="citeFmt">Format</label>' +
+          '<select id="citeFmt">' +
+            '<option value="apa">Plain (APA-style)</option>' +
+            '<option value="bibtex">BibTeX</option>' +
+            '<option value="ris">RIS</option>' +
+          '</select></div>' +
+        '<div class="field"><label class="sr-only" for="citeOut">Citation text</label>' +
+          '<textarea id="citeOut" rows="7" readonly></textarea></div>' +
+        '<div class="btn-row"><button class="btn btn--sm btn--primary" type="button" id="citeCopy">Copy</button>' +
+          '<button class="btn btn--sm" type="button" id="citeDownload">Download</button></div>'
+    });
+    var sel = document.getElementById('citeFmt');
+    var out = document.getElementById('citeOut');
+    function refresh() { out.value = ESH.exporter.citation(r, sel.value); }
+    sel.addEventListener('change', refresh);
+    refresh();
+
+    document.getElementById('citeCopy').addEventListener('click', function () {
+      out.select();
+      var done = false;
+      try {
+        if (global.navigator && navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(out.value); done = true;
+        }
+      } catch (e) {}
+      if (!done) { try { done = document.execCommand('copy'); } catch (e) {} }
+      ui.toast(done ? 'Citation copied.' : 'Select the text and copy manually.', done ? 'good' : 'err');
+    });
+    document.getElementById('citeDownload').addEventListener('click', function () {
+      var ext = sel.value === 'bibtex' ? 'bib' : sel.value === 'ris' ? 'ris' : 'txt';
+      var mime = sel.value === 'bibtex' ? 'application/x-bibtex'
+               : sel.value === 'ris' ? 'application/x-research-info-systems' : 'text/plain';
+      ESH.exporter.download('citation-' + r.id + '.' + ext, mime, out.value);
+    });
   }
 
   function wire(r, viewer, ctx) {

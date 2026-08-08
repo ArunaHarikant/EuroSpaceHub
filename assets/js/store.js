@@ -61,6 +61,28 @@
 
   var STANDING = ['active', 'inactive', 'alumnus'];
 
+  /* Suggested (not enforced) canonical institutions. Free text is still
+     accepted; these drive the datalists and canonicalInstitution() so the same
+     place isn't spelled three ways across the roster and filters. */
+  var INSTITUTIONS = [
+    'International Space University',
+    'Vrije Universiteit Amsterdam',
+    'Florida Institute of Technology',
+    'ISAE-SUPAERO',
+    'Delft University of Technology',
+    'Technical University of Munich',
+    'University of Strathclyde'
+  ];
+  var INSTITUTION_ALIASES = {
+    'isu': 'International Space University',
+    'vu': 'Vrije Universiteit Amsterdam',
+    'vu amsterdam': 'Vrije Universiteit Amsterdam',
+    'fit': 'Florida Institute of Technology',
+    'florida tech': 'Florida Institute of Technology',
+    'tu delft': 'Delft University of Technology',
+    'tum': 'Technical University of Munich'
+  };
+
   var ACCEPTED_FILES = '.pdf,.docx,.pptx,application/pdf,' +
     'application/vnd.openxmlformats-officedocument.wordprocessingml.document,' +
     'application/vnd.openxmlformats-officedocument.presentationml.presentation';
@@ -440,6 +462,16 @@
 
   function getState() { return state || load(); }
 
+  /* Replace all data with a previously exported object. Validates the shape
+     before committing so a malformed file cannot corrupt the store. Returns
+     true on success. */
+  function importState(obj) {
+    if (!obj || obj.version !== 1 || !Array.isArray(obj.users) || !Array.isArray(obj.reports)) return false;
+    state = { version: 1, seededAt: obj.seededAt || nowISO(), users: obj.users, reports: obj.reports };
+    save();
+    return true;
+  }
+
   /* ---------------- queries ---------------- */
 
   function users()   { return getState().users.slice(); }
@@ -471,6 +503,54 @@
   function isReleased(r) { return !!(STATUSES[r.status] && STATUSES[r.status].released); }
   function releasedReports() { return getState().reports.filter(isReleased); }
 
+  /* ---------------- controlled-vocabulary helpers ----------------
+     None of these ENFORCE a closed list — unknown values pass through as free
+     text. They just fold obvious variants together (aliases, casing, spacing)
+     so the roster, filters and library facets don't fragment. */
+
+  function canonicalInstitution(s) {
+    var t = String(s || '').trim();
+    if (!t) return '';
+    var key = t.toLowerCase();
+    if (INSTITUTION_ALIASES[key]) return INSTITUTION_ALIASES[key];
+    for (var i = 0; i < INSTITUTIONS.length; i++) {
+      if (INSTITUTIONS[i].toLowerCase() === key) return INSTITUTIONS[i];
+    }
+    return t;
+  }
+
+  /* Trim, collapse inner whitespace, and drop case-insensitive duplicates
+     (keeping the first spelling seen). */
+  function canonicalKeywords(list) {
+    var seen = {}, out = [];
+    (list || []).forEach(function (k) {
+      var t = String(k || '').replace(/\s+/g, ' ').trim();
+      if (!t) return;
+      var key = t.toLowerCase();
+      if (seen[key]) return;
+      seen[key] = true;
+      out.push(t);
+    });
+    return out;
+  }
+
+  /* Existing keywords across all reports, most-used first — for suggestions. */
+  function suggestedKeywords() {
+    var freq = {};
+    getState().reports.forEach(function (r) {
+      (r.keywords || []).forEach(function (k) {
+        var t = String(k || '').trim();
+        if (!t) return;
+        var key = t.toLowerCase();
+        if (!freq[key]) freq[key] = { label: t, n: 0 };
+        freq[key].n++;
+      });
+    });
+    return Object.keys(freq).map(function (key) { return freq[key]; })
+      .sort(function (a, b) { return b.n - a.n || a.label.localeCompare(b.label); })
+      .map(function (x) { return x.label; });
+  }
+
   /* Display name for a report's author line. */
   function authorLine(r) {
     var owner = userById(r.ownerId);
@@ -498,6 +578,17 @@
     var u = userById(id);
     if (!u) return null;
     Object.keys(patch).forEach(function (k) { u[k] = patch[k]; });
+    save();
+    return u;
+  }
+
+  /* Marks the point up to which a user has seen their notifications. Anything
+     that happened after this timestamp is "unread". A missing value (never
+     visited) means everything is unread. */
+  function markNotificationsSeen(userId) {
+    var u = userById(userId);
+    if (!u) return null;
+    u.notificationsSeenAt = nowISO();
     save();
     return u;
   }
@@ -643,16 +734,18 @@
     KEY: KEY, SESSION_KEY: SESSION_KEY, SUPERVISOR_ID: SUPERVISOR_ID,
     MISSION_AREAS: MISSION_AREAS, REPORT_TYPES: REPORT_TYPES,
     STATUSES: STATUSES, STATUS_ORDER: STATUS_ORDER, TRANSITIONS: TRANSITIONS,
-    STANDING: STANDING, ACCEPTED_FILES: ACCEPTED_FILES,
+    STANDING: STANDING, ACCEPTED_FILES: ACCEPTED_FILES, INSTITUTIONS: INSTITUTIONS,
+    canonicalInstitution: canonicalInstitution, canonicalKeywords: canonicalKeywords,
+    suggestedKeywords: suggestedKeywords,
 
-    load: load, save: save, reset: reset, getState: getState, uid: uid, nowISO: nowISO,
+    load: load, save: save, reset: reset, getState: getState, importState: importState, uid: uid, nowISO: nowISO,
 
     users: users, interns: interns, supervisors: supervisors,
     userById: userById, userByEmail: userByEmail,
     reports: reports, reportById: reportById, reportsByOwner: reportsByOwner,
     releasedReports: releasedReports, isReleased: isReleased, authorLine: authorLine,
 
-    addUser: addUser, updateUser: updateUser,
+    addUser: addUser, updateUser: updateUser, markNotificationsSeen: markNotificationsSeen,
     addReport: addReport, updateReport: updateReport,
     setStatus: setStatus, logHistory: logHistory, addComment: addComment,
 

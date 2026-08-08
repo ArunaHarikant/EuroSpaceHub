@@ -20,6 +20,10 @@
   var ICON_MOON = '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" ' +
     'stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M20 14.2A8 8 0 1 1 9.8 4 ' +
     '6.4 6.4 0 0 0 20 14.2z"/></svg>';
+  var ICON_BELL = '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" ' +
+    'stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+    '<path d="M18 8.5a6 6 0 1 0-12 0c0 6-2.2 7.5-2.2 7.5h16.4S18 14.5 18 8.5z"/>' +
+    '<path d="M13.7 20a2 2 0 0 1-3.4 0"/></svg>';
 
   function currentTheme() {
     try { return global.localStorage.getItem(THEME_KEY) === 'light' ? 'light' : 'dark'; }
@@ -52,6 +56,7 @@
   router.register('/researcher/:id',        V.profile,     'auth');
   router.register('/researcher/:id/edit',   V.profileEdit, 'auth');
   router.register('/me',                    V.me,          'auth');
+  router.register('/inbox',                 V.inbox,       'auth');
   router.register('/dashboard',             V.dashboard,   'supervisor');
   router.register('/signin',                V.signin);
   router.register('/register',              V.register);
@@ -105,7 +110,12 @@
       var roleLabel = u.role === 'supervisor'
         ? (u.id === store.SUPERVISOR_ID ? 'Supervisor' : 'Co-supervisor')
         : 'Researcher';
-      host.innerHTML = themeBtn +
+      var unread = auth.notificationsFor(u).filter(function (n) { return n.unread; }).length;
+      var bell = '<a class="notifbell" href="#/inbox" title="Notifications" aria-label="Notifications' +
+        (unread ? ' (' + unread + ' unread)' : '') + '">' + ICON_BELL +
+        (unread ? '<span class="notif-count" aria-hidden="true">' + (unread > 9 ? '9+' : unread) + '</span>' : '') +
+        '</a>';
+      host.innerHTML = bell + themeBtn +
         '<span class="sessionchip">' +
           ui.avatar(u, 'sm') +
           '<span class="sessionchip__txt">' +
@@ -164,6 +174,41 @@
           ui.toast('Demonstration data reset.', 'good');
           router.navigate('#/');
         }, true);
+    });
+
+    /* Export the whole store as a JSON file the visitor can keep or move to
+       another browser (the store otherwise lives only in this one). */
+    document.getElementById('exportData').addEventListener('click', function () {
+      ESH.exporter.download('eurospacehub-data.json', 'application/json',
+        JSON.stringify(store.getState(), null, 2));
+    });
+
+    /* Import replaces everything, so it is gated behind a confirm and the shape
+       is validated in store.importState(). */
+    var importInput = document.getElementById('importData');
+    importInput.addEventListener('change', function () {
+      var file = importInput.files && importInput.files[0];
+      if (!file) return;
+      var reader = new global.FileReader();
+      reader.onload = function () {
+        var obj;
+        try { obj = JSON.parse(reader.result); }
+        catch (e) { ui.toast('That file is not valid JSON.', 'err'); importInput.value = ''; return; }
+        ui.confirmDialog('Import data',
+          'This replaces every account, report and comment in this browser with the contents of the file. ' +
+          'This cannot be undone. Consider exporting first.',
+          'Replace all data', function () {
+            if (store.importState(obj)) {
+              auth.signOut();
+              ui.toast('Data imported.', 'good');
+              router.navigate('#/');
+            } else {
+              ui.toast('That file is not a valid hub export.', 'err');
+            }
+          }, true);
+        importInput.value = '';
+      };
+      reader.readAsText(file);
     });
   }
 
