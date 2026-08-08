@@ -81,7 +81,8 @@ async function bootOnce() {
 
   const ready = await waitFor(() => {
     const E = window.ESH;
-    return E && E.store && E.auth && E.router && E.exporter && E.views &&
+    return E && E.store && E.auth && E.router && E.exporter &&
+      E.charts && typeof E.charts.columnChart === 'function' && E.views &&
       REQUIRED_VIEWS.every(v => typeof E.views[v] === 'function') &&
       window.document.getElementById('view').children.length > 0;
   });
@@ -374,7 +375,7 @@ ok('dashboard has both charts',
    /Reports by workflow state/.test(text()) && /Reports by mission area/.test(text()));
 ok('charts use the two validated hues',
    html().includes('var(--series-1)') && html().includes('var(--series-2)'));
-ok('charts expose a table view', (html().match(/View as table/g) || []).length === 2);
+ok('charts expose a table view', (html().match(/View as table/g) || []).length === 3);
 ok('stat tiles present',
    /Researchers/.test(text()) && /Awaiting your action/.test(text()) && /Shared records/.test(text()));
 ok('dashboard lists every report',
@@ -760,6 +761,24 @@ section('Pagination & performance (B6)');
   ok('quick comment is persisted', ESH.store.reportById(rid).comments.length === before + 1);
   ok('panel stays open — appended in place, no navigation', !!view().querySelector('[data-quickcomment]'));
   ok('the new comment shows without a reload', /Inline append PROBE/.test(text()));
+}
+ESH.store.reset(); ESH.auth.restore();
+
+/* dashboard analytics: turnaround + submissions over time */
+section('Dashboard analytics (B9)');
+{
+  const c = ESH.charts.columnChart({ title: 'Test series', unit: 'submissions',
+    data: [{ label: 'Jan', value: 3 }, { label: 'Feb', value: 1 }] });
+  ok('columnChart renders an accessible svg', /role="img"/.test(c) && /aria-label="Test series/.test(c));
+  ok('columnChart offers a table fallback', /View as table/.test(c) && />3<\/td>/.test(c));
+}
+{
+  ESH.store.reset(); ESH.auth.restore(); ESH.auth.assume('u_foing');
+  goto('#/dashboard');
+  ok('dashboard shows a review-turnaround stat', /Avg\. review turnaround/.test(text()));
+  ok('turnaround is computed to a day value', /\d+\.\d days/.test(text()));
+  ok('dashboard shows a submissions-over-time chart', /Submissions over time/.test(text()));
+  ok('all three analytics charts have a table fallback', view().querySelectorAll('.chart__table').length >= 3);
 }
 ESH.store.reset(); ESH.auth.restore();
 
