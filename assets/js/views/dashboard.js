@@ -42,6 +42,42 @@
     });
     var areaData = store.MISSION_AREAS.map(function (a) { return { label: a, value: byArea[a] }; });
 
+    /* Review turnaround: days from a record being Submitted to the supervisor's
+       first decision on it (opening for review, requesting revisions, approving
+       or rejecting). Answers "how long is work sitting with me?". */
+    var DECISIONS = ['review', 'revisions', 'approved', 'rejected'];
+    var turns = [];
+    reports.forEach(function (r) {
+      if (!r.submittedAt) return;
+      var sub = new Date(r.submittedAt).getTime();
+      var decided = null;
+      (r.history || []).forEach(function (h) {
+        if (decided !== null) return;
+        if (DECISIONS.indexOf(h.to) === -1) return;
+        var by = store.userById(h.by);
+        var at = new Date(h.at).getTime();
+        if (by && by.role === 'supervisor' && at >= sub) decided = at;
+      });
+      if (decided !== null) turns.push((decided - sub) / 86400000);
+    });
+    var avgTurn = turns.length
+      ? (turns.reduce(function (a, b) { return a + b; }, 0) / turns.length).toFixed(1) + ' days'
+      : '—';
+
+    /* Submissions over the last six calendar months (by submittedAt). */
+    var MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    var now = new Date(), months = [];
+    for (var m = 5; m >= 0; m--) {
+      var dt = new Date(now.getFullYear(), now.getMonth() - m, 1);
+      months.push({ key: dt.getFullYear() + '-' + (dt.getMonth() + 1), label: MON[dt.getMonth()], value: 0 });
+    }
+    reports.forEach(function (r) {
+      if (!r.submittedAt) return;
+      var d = new Date(r.submittedAt);
+      var key = d.getFullYear() + '-' + (d.getMonth() + 1);
+      months.forEach(function (mm) { if (mm.key === key) mm.value++; });
+    });
+
     return '' +
     '<section class="section">' +
       '<div class="section__head"><h2>Summary</h2>' +
@@ -51,8 +87,9 @@
         charts.statTile('Reports', String(reports.length), featured + ' featured in the library') +
         charts.statTile('Awaiting your action', String(awaiting), 'Submitted or under review') +
         charts.statTile('Shared records', String(live), 'Approved or published') +
+        charts.statTile('Avg. review turnaround', avgTurn, 'Submitted → your first decision') +
       '</div>' +
-      '<div class="grid grid--2">' +
+      '<div class="grid grid--2 mb-20">' +
         charts.horizontalBars({
           title: 'Reports by workflow state',
           subtitle: 'Every record currently in the hub.',
@@ -64,6 +101,11 @@
           data: areaData, color: 'var(--series-2)', unit: 'reports'
         }) +
       '</div>' +
+      charts.columnChart({
+        title: 'Submissions over time',
+        subtitle: 'Records submitted for review, by month (last six months).',
+        data: months, color: 'var(--series-1)', unit: 'submissions'
+      }) +
     '</section>';
   }
 

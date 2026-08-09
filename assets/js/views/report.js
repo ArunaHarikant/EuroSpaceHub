@@ -214,6 +214,7 @@
               '<dt>Co-authors</dt><dd>' + coAuthorHtml + '</dd>' +
               '<dt>Mission area</dt><dd>' + esc(r.missionArea) + '</dd>' +
               '<dt>Report type</dt><dd>' + esc(r.reportType) + '</dd>' +
+              (r.campaign ? '<dt>Campaign</dt><dd><a href="#/library?campaign=' + encodeURIComponent(r.campaign) + '">' + esc(r.campaign) + '</a></dd>' : '') +
               '<dt>Keywords</dt><dd>' + ((r.keywords || []).length
                   ? r.keywords.map(function (k) {
                       return '<a class="tag" href="#/library?q=' + encodeURIComponent(k) + '">' + esc(k) + '</a>';

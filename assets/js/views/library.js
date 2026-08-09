@@ -20,9 +20,10 @@
     if (f.type && f.type !== 'all' && r.reportType !== f.type) return false;
     if (f.author && f.author !== 'all' && r.ownerId !== f.author) return false;
     if (f.year && f.year !== 'all' && ui.year(r.submittedAt || r.createdAt) !== f.year) return false;
+    if (f.campaign && f.campaign !== 'all' && r.campaign !== f.campaign) return false;
     if (f.q) {
       var hay = [r.title, r.abstract, store.authorLine(r), (r.keywords || []).join(' '),
-                 r.reportType, r.missionArea].join(' ').toLowerCase();
+                 r.reportType, r.missionArea, r.campaign || ''].join(' ').toLowerCase();
       var terms = f.q.toLowerCase().split(/\s+/).filter(Boolean);
       for (var i = 0; i < terms.length; i++) if (hay.indexOf(terms[i]) === -1) return false;
     }
@@ -50,13 +51,15 @@
     var all = store.releasedReports();
 
     var f = {
-      area:   ctx.query.area   || 'all',
-      type:   ctx.query.type   || 'all',
-      author: ctx.query.author || 'all',
-      year:   ctx.query.year   || 'all',
-      q:      ctx.query.q      || '',
-      sort:   ctx.query.sort   || 'recent'
+      area:     ctx.query.area     || 'all',
+      type:     ctx.query.type     || 'all',
+      author:   ctx.query.author   || 'all',
+      year:     ctx.query.year     || 'all',
+      campaign: ctx.query.campaign || 'all',
+      q:        ctx.query.q        || '',
+      sort:     ctx.query.sort     || 'recent'
     };
+    var campaigns = store.campaignsInUse();
 
     var years = {};
     all.forEach(function (r) { years[ui.year(r.submittedAt || r.createdAt)] = 1; });
@@ -79,7 +82,7 @@
     var pageResults = results.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
     var makeHref = function (n) {
       return '#/library' + router.buildQuery({
-        q: f.q, area: f.area, type: f.type, author: f.author, year: f.year,
+        q: f.q, area: f.area, type: f.type, author: f.author, year: f.year, campaign: f.campaign,
         sort: f.sort === 'recent' ? '' : f.sort, page: n > 1 ? n : ''
       });
     };
@@ -113,6 +116,10 @@
           '<option value="all">All authors</option>' + ui.selectOptions(authors, f.author) + '</select></div>' +
         '<div class="field"><label for="fyear">Year</label><select id="fyear" name="year">' +
           '<option value="all">All years</option>' + ui.selectOptions(yearList, f.year) + '</select></div>' +
+        (campaigns.length
+          ? '<div class="field"><label for="fcampaign">Campaign</label><select id="fcampaign" name="campaign">' +
+            '<option value="all">All campaigns</option>' + ui.selectOptions(campaigns, f.campaign) + '</select></div>'
+          : '') +
         '<div class="field"><label for="fsort">Sort</label><select id="fsort" name="sort">' +
           ui.selectOptions([
             { value: 'recent', label: 'Featured, then newest' },
@@ -146,6 +153,7 @@
       var data = {
         q: form.elements.q.value.trim(), area: form.elements.area.value, type: form.elements.type.value,
         author: form.elements.author.value, year: form.elements.year.value,
+        campaign: form.elements.campaign ? form.elements.campaign.value : 'all',
         sort: form.elements.sort.value === 'recent' ? '' : form.elements.sort.value
       };
       router.navigate('#/library' + router.buildQuery(data));
@@ -154,6 +162,7 @@
     ['area','type','author','year','sort'].forEach(function (n) {
       form.elements[n].addEventListener('change', apply);
     });
+    if (form.elements.campaign) form.elements.campaign.addEventListener('change', apply);
     var t;
     form.elements.q.addEventListener('input', function () { clearTimeout(t); t = setTimeout(apply, 320); });
     document.getElementById('fReset').addEventListener('click', function () { router.navigate('#/library'); });

@@ -137,6 +137,67 @@
            '</div>';
   }
 
+  /**
+   * columnChart(opts) — vertical bars for a short time series (months). Same
+   * feature set as horizontalBars: one hue, direct value labels, a hover
+   * tooltip and a table view, so it reads the same and stays accessible.
+   *   opts.title, opts.subtitle, opts.unit
+   *   opts.data  = [{ label, value }]
+   *   opts.color = CSS custom-property name
+   */
+  function columnChart(opts) {
+    var data = opts.data || [];
+    var color = opts.color || 'var(--series-1)';
+    var unit = opts.unit || '';
+
+    var total = data.reduce(function (a, d) { return a + d.value; }, 0);
+    var scale = scaleFor(Math.max.apply(null, data.map(function (d) { return d.value; }).concat([0])));
+    var maxVal = scale.max;
+
+    var padTop = 16, padBottom = 28, padLeft = 34, padRight = 10;
+    var vw = 640, plotH = 150, vh = padTop + plotH + padBottom;
+    var plotW = vw - padLeft - padRight;
+    var n = data.length || 1, slot = plotW / n;
+    var barW = Math.min(48, slot * 0.62);
+    function sy(v) { return padTop + plotH - (maxVal ? (v / maxVal) * plotH : 0); }
+
+    var svg = '<svg viewBox="0 0 ' + vw + ' ' + vh + '" role="img" aria-label="' +
+      esc(opts.title + '. ' + data.map(function (d) { return d.label + ': ' + d.value; }).join('; ')) + '">';
+
+    scale.ticks.forEach(function (t) {
+      var y = sy(t);
+      svg += '<line class="c-grid" x1="' + padLeft + '" y1="' + y + '" x2="' + (vw - padRight) + '" y2="' + y + '"/>';
+      svg += '<text class="c-label" x="' + (padLeft - 6) + '" y="' + (y + 4) + '" text-anchor="end">' + t + '</text>';
+    });
+    svg += '<line class="c-axis" x1="' + padLeft + '" y1="' + (padTop + plotH) + '" x2="' + (vw - padRight) + '" y2="' + (padTop + plotH) + '"/>';
+
+    data.forEach(function (d, i) {
+      var cx = padLeft + slot * i + slot / 2;
+      var y = sy(d.value);
+      var h = Math.max(0, (padTop + plotH) - y);
+      var pct = total ? Math.round(d.value / total * 100) : 0;
+      svg += '<g class="c-row" data-label="' + esc(d.label) + '" data-value="' + d.value + '" data-pct="' + pct + '">';
+      svg += '<rect class="c-hit" x="' + (padLeft + slot * i) + '" y="' + padTop + '" width="' + slot + '" height="' + plotH + '"/>';
+      svg += '<rect class="c-bar" x="' + (cx - barW / 2).toFixed(1) + '" y="' + y.toFixed(1) +
+             '" width="' + barW.toFixed(1) + '" height="' + h.toFixed(1) + '" rx="3" fill="' + color + '"/>';
+      if (d.value > 0) svg += '<text class="c-value" x="' + cx.toFixed(1) + '" y="' + (y - 5).toFixed(1) + '" text-anchor="middle">' + d.value + '</text>';
+      svg += '<text class="c-label" x="' + cx.toFixed(1) + '" y="' + (padTop + plotH + 16) + '" text-anchor="middle">' + esc(d.label) + '</text>';
+      svg += '</g>';
+    });
+    svg += '</svg>';
+
+    var table = '<details class="chart__table"><summary>View as table</summary>' +
+      '<table><thead><tr><th scope="col">Period</th><th scope="col" class="num">' + esc(unit) + '</th></tr></thead><tbody>' +
+      data.map(function (d) { return '<tr><td>' + esc(d.label) + '</td><td class="num">' + d.value + '</td></tr>'; }).join('') +
+      '</tbody></table></details>';
+
+    return '<div class="card chart" data-chart data-unit="' + esc(unit) + '">' +
+             '<h3 class="chart__title">' + esc(opts.title) + '</h3>' +
+             (opts.subtitle ? '<p class="chart__sub">' + esc(opts.subtitle) + '</p>' : '') +
+             svg + table +
+           '</div>';
+  }
+
   /* Attach hover tooltips to every chart inside a container. */
   function bindTips(container) {
     container.querySelectorAll('[data-chart]').forEach(function (chart) {
@@ -159,6 +220,6 @@
            (sub ? '<p class="stat__sub">' + esc(sub) + '</p>' : '') + '</div>';
   }
 
-  global.ESH.charts = { horizontalBars: horizontalBars, bindTips: bindTips, statTile: statTile, hideTip: hideTip };
+  global.ESH.charts = { horizontalBars: horizontalBars, columnChart: columnChart, bindTips: bindTips, statTile: statTile, hideTip: hideTip };
 
 })(window);
