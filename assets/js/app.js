@@ -106,6 +106,25 @@
 
     var banner = document.getElementById('demoBanner');
     var closeBtn = document.getElementById('demoBannerClose');
+
+    /* The banner has to tell the truth about which build this is. With a
+       backend answering, "no server, no real security" would be a lie. */
+    var tag = document.getElementById('demoBannerTag');
+    var text = document.getElementById('demoBannerText');
+    if (store.apiMode()) {
+      banner.classList.add('demo-banner--live');
+      tag.textContent = 'PRIVATE';
+      text.innerHTML = 'Access is enforced on the server. Report files are stored in ' +
+        'private Backblaze B2 storage and reached only through short-lived signed links. ' +
+        '<a href="#/about-demo">How the access model works &rsaquo;</a>';
+    } else {
+      tag.textContent = 'DEMO MODE';
+      text.innerHTML = 'Authentication and access control in this build are ' +
+        '<strong>simulated in the browser</strong> (no server, no real security). All data is ' +
+        "stored in this browser's <code>localStorage</code>. " +
+        '<a href="#/about-demo">How the access model works &rsaquo;</a>';
+    }
+    banner.hidden = false;
     try {
       if (global.sessionStorage.getItem('esh.banner.dismissed') === '1') banner.hidden = true;
     } catch (e) {}
@@ -121,7 +140,9 @@
       toggle.setAttribute('aria-expanded', String(open));
     });
 
-    document.getElementById('resetData').addEventListener('click', function () {
+    var resetBtn = document.getElementById('resetData');
+    if (store.apiMode()) resetBtn.hidden = true;   /* there is no demo data to reset */
+    resetBtn.addEventListener('click', function () {
       ui.confirmDialog('Reset demonstration data',
         'This discards every account, report and comment created in this browser and restores the seeded ' +
         'placeholder content. This cannot be undone.',
@@ -137,11 +158,26 @@
   /* ---------------- boot ---------------- */
 
   function boot() {
-    store.load();
-    auth.restore();
     wireGlobal();
-    renderChrome();
-    router.start();
+
+    /* When the server refuses an optimistic write, the cache has already been
+       re-synced; all that is left is to tell the user and repaint. */
+    store.setSyncErrorHandler(function (err, what) {
+      ui.toast((what || 'That change') + ' was rejected by the server: ' + err.message, 'err');
+      router.resolve();
+      renderChrome();
+    });
+
+    /* API mode does one /bootstrap round trip before the first render, so the
+       first paint shows the server's truth rather than a guess. */
+    store.hydrate().catch(function (err) {
+      console.error('[boot] could not reach the API; falling back to local data.', err);
+      store.load();
+    }).then(function () {
+      auth.restore();
+      renderChrome();
+      router.start();
+    });
   }
 
   ESH.app = { renderChrome: renderChrome };

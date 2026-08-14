@@ -1,0 +1,18 @@
+[
+  {
+    "corsRuleName": "eurospacehub-local-dev",
+    "allowedOrigins": ["http://localhost:3000"],
+    "allowedOperations": ["s3_put", "s3_get", "s3_head"],
+    "allowedHeaders": ["*"],
+    "exposeHeaders": ["etag"],
+    "maxAgeSeconds": 3600
+  },
+  {
+    "corsRuleName": "eurospacehub-production",
+    "allowedOrigins": ["https://hub.eurospacehub.com"],
+    "allowedOperations": ["s3_put", "s3_get", "s3_head"],
+    "allowedHeaders": ["*"],
+    "exposeHeaders": ["etag"],
+    "maxAgeSeconds": 3600
+  }
+]

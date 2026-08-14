@@ -13,3 +13,8 @@ desktop.ini
 # Transient
 *.log
 npm-debug.log*
+
+# Backend
+server/node_modules/
+server/.env
+server/data/

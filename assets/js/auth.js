@@ -1,30 +1,43 @@
 /* ==========================================================================
-   auth.js — STUBBED authentication + the authorisation (permission) layer.
+   auth.js — the browser's session, plus a thin wrapper over the shared gate.
 
    ┌──────────────────────────────────────────────────────────────────────┐
-   │  THIS IS NOT REAL SECURITY.                                          │
-   │  There is no server, no session token, no password hashing and no    │
-   │  server-side enforcement. "Sign-in" compares a plaintext demo        │
-   │  password held in localStorage; the current role is a string in      │
-   │  localStorage that the visitor can edit with devtools.               │
+   │  THE RULES NO LONGER LIVE HERE.                                      │
+   │  Every authorisation decision is made by shared/policy.js, which the │
+   │  Node server requires from the same file. This module only supplies  │
+   │  the current actor so views can call can('x', y) without threading   │
+   │  the session through every call site.                                │
    │                                                                      │
-   │  What IS real here is the *shape* of the access model: every read    │
-   │  and every write in the UI goes through the `can()` gate below, so   │
-   │  the rules are stated in one place and can be ported verbatim to a   │
-   │  server-side policy when this module is wired to a backend.          │
-   │  See README.md § Access control for the porting notes.               │
+   │  What the browser decides is which controls to RENDER. What the      │
+   │  server decides is what actually happens. A client-side `true` here  │
+   │  buys nothing: the API re-evaluates the same policy against its own  │
+   │  session row and its own report row before it acts.                  │
    └──────────────────────────────────────────────────────────────────────┘
+
+   Two session modes:
+     API mode  (ESH_CONFIG.apiBase set) — the session is an httpOnly cookie the
+                page cannot read; `current` is whatever /api/auth/me returned.
+                Sign-in and sign-out are server round trips.
+     Demo mode (no apiBase) — the original localStorage stub, kept so the hub
+                still runs from file:// and so tests/smoke.mjs works offline.
+                Clearly labelled in the UI as a demonstration.
    ========================================================================== */
 (function (global) {
   'use strict';
 
   var store = global.ESH.store;
+  var P = global.ESHPolicy;
 
-  /* ---------------- session (stub) ---------------- */
+  if (!P) throw new Error('shared/policy.js must load before assets/js/auth.js');
 
-  var current = null;   /* null === public visitor */
+  function apiMode() { return !!(global.ESH.api && global.ESH.api.enabled()); }
+
+  /* ---------------- session ---------------- */
+
+  var current = null;   /* null === unauthenticated visitor */
 
   function restore() {
+    if (apiMode()) { current = global.ESH.api.session(); return current; }
     var id = null;
     try { id = global.localStorage.getItem(store.SESSION_KEY); } catch (e) {}
     current = id ? store.userById(id) : null;
@@ -32,11 +45,14 @@
   }
 
   function persist() {
+    if (apiMode()) return;                 /* the cookie is the session */
     try {
       if (current) global.localStorage.setItem(store.SESSION_KEY, current.id);
       else global.localStorage.removeItem(store.SESSION_KEY);
     } catch (e) {}
   }
+
+  function setCurrent(u) { current = u || null; persist(); return current; }
 
   function user() { return current; }
   function role() { return current ? current.role : 'public'; }
@@ -44,225 +60,82 @@
   function isIntern() { return role() === 'intern'; }
   function isAuthenticated() { return !!current; }
 
-  /* Demo sign-in. Plaintext comparison — stubbed on purpose. */
+  /**
+   * signIn(email, password)
+   *   API mode  — async, returns a Promise<{ok, user|error}>.
+   *   Demo mode — synchronous, returns {ok, user|error} as it always did.
+   * Callers that must work in both await the result; awaiting a plain object
+   * is harmless, so `var res = await auth.signIn(...)` is correct either way.
+   */
   function signIn(email, password) {
+    if (apiMode()) {
+      return global.ESH.api.login(email, password).then(function (res) {
+        if (res.ok) setCurrent(res.user);
+        return res;
+      });
+    }
     var u = store.userByEmail(email);
     if (!u) return { ok: false, error: 'No account found for that email address.' };
     if (String(u.password) !== String(password)) return { ok: false, error: 'Incorrect password.' };
-    current = u;
-    persist();
+    setCurrent(u);
     return { ok: true, user: u };
   }
 
-  /* Demo-mode shortcut: assume a role without credentials. Clearly labelled
-     in the UI as a demonstration affordance, not an authentication path. */
+  /* Demo-mode shortcut: assume a role without credentials. Refused outright
+     when a real backend is present — it would be an authentication bypass. */
   function assume(userId) {
+    if (apiMode()) {
+      return { ok: false, error: 'The demo role switcher is disabled when a real backend is configured.' };
+    }
     var u = store.userById(userId);
     if (!u) return { ok: false, error: 'Unknown demo account.' };
-    current = u;
-    persist();
+    setCurrent(u);
     return { ok: true, user: u };
   }
 
-  function signOut() { current = null; persist(); }
-
-  function refresh() { if (current) current = store.userById(current.id); return current; }
-
-  /* ==========================================================================
-     AUTHORISATION — the single source of truth for who may see or do what.
-
-     Roles
-       public      unauthenticated visitor
-       intern      authenticated student researcher
-       supervisor  Prof. Foing (primary) and any designated co-supervisor
-
-     Rules, stated plainly:
-       · This hub is CLOSED. Unauthenticated visitors get Prof. Foing's own
-         profile page and the sign-in screen — no reports, no report library,
-         no researcher profiles, no names, no counts. Nothing else at all.
-       · Interns may read and write their OWN profile and their OWN reports
-         subject to the workflow state, and may read reports the supervisor has
-         RELEASED (Approved or Published) plus the basic profile of whoever
-         wrote them. They may not read other interns' unreleased work, other
-         interns' contact details or research-period dates, any internal
-         supervisor note, or any internal comment.
-       · Supervisors may read everything and drive the workflow. Only
-         supervisors may change status, feature a report, write internal
-         comments or internal notes, or set an intern's standing.
-     ========================================================================== */
-
-  /* What one signed-in member may see of another. Email, research-period
-     dates and internal notes are absent by construction. */
-  var SHARED_USER_FIELDS = ['id','fullName','institution','programme','researchTopic','keywords','bio','photoUrl','links','standing','role'];
-
-  function isOwner(u, resource) {
-    if (!u || !resource) return false;
-    if (resource.ownerId) return resource.ownerId === u.id;   /* report */
-    if (resource.id) return resource.id === u.id;             /* user */
-    return false;
+  function signOut() {
+    if (apiMode()) {
+      var p = global.ESH.api.logout();
+      setCurrent(null);
+      return p;
+    }
+    setCurrent(null);
   }
 
-  /**
-   * can(action, resource) — the authorisation gate.
-   * @param {string} action  e.g. 'report:read', 'report:setStatus'
-   * @param {object} [resource]
-   * @param {object} [u] optional actor override (defaults to current session)
-   * @returns {boolean}
-   */
+  function refresh() {
+    if (apiMode()) { current = global.ESH.api.session(); return current; }
+    if (current) current = store.userById(current.id);
+    return current;
+  }
+
+  /* ---------------- the gate (delegated) ----------------
+     Identical signatures to before, so every existing call site is unchanged.
+     Each one fills in the current actor and hands off to shared/policy.js. */
+
+  function actorOr(u) { return (u === undefined) ? current : u; }
+
   function can(action, resource, u) {
-    u = (u === undefined) ? current : u;
-    var r = u ? u.role : 'public';
-    var sup = (r === 'supervisor');
-    var intern = (r === 'intern');
-    var owner = isOwner(u, resource);
-
-    switch (action) {
-
-      /* ---- reports: read ---- */
-      case 'report:read':
-        if (!resource) return false;
-        if (sup) return true;                            /* supervisor sees all states */
-        if (!intern) return false;                       /* no session ⇒ no records */
-        return owner || store.isReleased(resource);      /* own work, or released work */
-
-      case 'report:readAny':                             /* the dashboard's "see everything" */
-        return sup;
-
-      /* ---- reports: write ---- */
-      case 'report:create':
-        return intern || sup;
-
-      case 'report:edit': {
-        if (!resource) return false;
-        if (sup) return true;                            /* supervisor may correct metadata */
-        if (!intern || !owner) return false;
-        var st = store.STATUSES[resource.status];
-        return !!(st && st.internEditable);              /* Draft or Revisions Requested */
-      }
-
-      case 'report:delete':                              /* hard delete is supervisor-only */
-        return sup;
-
-      case 'report:setStatus':
-        if (!resource) return false;
-        return allowedTransitions(resource, u).length > 0;
-
-      case 'report:feature':                             /* pin to the top of the library */
-        return sup && !!resource && store.isReleased(resource);
-
-      case 'report:bulkAction':
-        return sup;
-
-      /* ---- comments ---- */
-      case 'comment:readInternal':                       /* supervisor-only side-channel */
-        return sup;
-
-      case 'comment:read':
-        if (!resource) return false;
-        return can('report:read', resource, u);
-
-      case 'comment:write':
-        if (!resource) return false;
-        if (sup) return true;
-        return intern && owner;                          /* interns may reply on own reports */
-
-      case 'comment:writeInternal':
-        return sup;
-
-      /* ---- intern profiles ---- */
-      case 'user:read':                                  /* basic profile of a colleague */
-        return !!u && !!resource;                        /* members only */
-
-      case 'user:readFull':                              /* email, dates, all reports */
-        if (!resource) return false;
-        return sup || (!!u && resource.id === u.id);
-
-      case 'user:edit':
-        if (!resource) return false;
-        return sup || (!!u && resource.id === u.id);
-
-      case 'user:resetPassword':                         /* issue a temporary password */
-        return sup && !!resource && resource.role !== 'supervisor';
-
-      case 'user:readInternalNotes':
-      case 'user:writeInternalNotes':
-      case 'user:setStanding':
-        return sup;
-
-      case 'user:listAll':
-        return sup;
-
-      /* ---- areas ---- */
-      case 'library:view':                               /* the shared report library */
-        return !!u;
-
-      case 'dashboard:view':
-        return sup;
-
-      default:
-        return false;
-    }
+    return P.can(action, resource, actorOr(u));
   }
-
-  /**
-   * allowedTransitions(report, actor) — legal next states for this actor.
-   * Mirrors store.TRANSITIONS and is the only place the UI should consult.
-   */
   function allowedTransitions(report, u) {
-    u = (u === undefined) ? current : u;
-    if (!u || !report) return [];
-    var table = store.TRANSITIONS[report.status];
-    if (!table) return [];
-    if (u.role === 'supervisor') return table.supervisor.slice();
-    if (u.role === 'intern' && report.ownerId === u.id) return table.intern.slice();
-    return [];
+    return P.allowedTransitions(report, actorOr(u));
   }
-
   function canTransition(report, to, u) {
-    return allowedTransitions(report, u).indexOf(to) !== -1;
+    return P.canTransition(report, to, actorOr(u));
   }
-
-  /**
-   * visibleReports(actor) — the report list an actor is entitled to see.
-   * Every list view derives from this; nothing queries store.reports() raw.
-   * An unauthenticated visitor gets an empty list, not a filtered one.
-   */
   function visibleReports(u) {
-    u = (u === undefined) ? current : u;
-    var all = store.reports();
-    if (u && u.role === 'supervisor') return all;
-    if (u && u.role === 'intern') {
-      return all.filter(function (r) { return r.ownerId === u.id || store.isReleased(r); });
-    }
-    return [];                                    /* no session ⇒ no records at all */
+    return P.visibleReports(store.reports(), actorOr(u));
   }
-
-  /**
-   * visibleComments(report, actor) — strips internal supervisor comments for
-   * anyone who is not a supervisor.
-   */
   function visibleComments(report, u) {
-    u = (u === undefined) ? current : u;
-    var list = (report.comments || []).slice();
-    if (can('comment:readInternal', report, u)) return list;
-    return list.filter(function (c) { return !c.internal; });
+    return P.visibleComments(report, actorOr(u));
   }
-
-  /**
-   * projectUser(target, actor) — returns only the fields the actor may read.
-   * Used anywhere an intern record is rendered for a non-privileged viewer.
-   */
   function projectUser(target, u) {
-    u = (u === undefined) ? current : u;
-    if (!target) return null;
-    if (can('user:readFull', target, u)) return target;
-    var out = {};
-    SHARED_USER_FIELDS.forEach(function (f) { out[f] = target[f]; });
-    out.__redacted = true;   /* marker: email, dates and notes withheld */
-    return out;
+    return P.projectUser(target, actorOr(u));
   }
 
-  /* Route-level guard used by the router. Returns true, or a redirect route. */
+  /* Route-level guard used by the router. Returns true, or a redirect route.
+     A convenience, never the boundary: views re-check can() before writing,
+     and the server re-checks everything again. */
   function guard(requirement) {
     switch (requirement) {
       case 'auth':       return isAuthenticated() ? true : '#/signin';
@@ -273,14 +146,15 @@
   }
 
   global.ESH.auth = {
-    restore: restore, user: user, role: role, refresh: refresh,
+    restore: restore, user: user, role: role, refresh: refresh, setCurrent: setCurrent,
     isSupervisor: isSupervisor, isIntern: isIntern, isAuthenticated: isAuthenticated,
+    apiMode: apiMode,
     signIn: signIn, signOut: signOut, assume: assume,
     can: can, guard: guard,
     allowedTransitions: allowedTransitions, canTransition: canTransition,
     visibleReports: visibleReports, visibleComments: visibleComments,
     projectUser: projectUser,
-    SHARED_USER_FIELDS: SHARED_USER_FIELDS
+    SHARED_USER_FIELDS: P.SHARED_USER_FIELDS
   };
 
 })(window);

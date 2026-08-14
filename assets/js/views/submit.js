@@ -67,8 +67,8 @@
                 : '<a href="#/me">&larr; Back to my profile</a>') + '</p>' +
       '<p class="eyebrow">' + (isEdit ? 'Edit submission' : 'New submission') + '</p>' +
       '<h1>' + (isEdit ? 'Edit research report' : 'Submit a research report') + '</h1>' +
-      '<p class="lede">Records are reviewed by Prof. Bernard Foing. Only approved and published ' +
-        'records appear in the public library.</p>' +
+      '<p class="lede">Records are reviewed by Prof. Bernard Foing. Only approved records are ' +
+        'shared with the rest of the research group.</p>' +
 
       (isEdit
         ? ui.notice(r.status === 'revisions' ? 'warn' : 'info',
@@ -122,8 +122,14 @@
                 (r.file.size ? ' (' + esc(ui.fmtBytes(r.file.size)) + ')' : '') +
                 ' — choose a new file to replace it.</p>'
               : '') +
-            '<p class="field__hint"><em>Demonstration limit:</em> the file stays in memory for this browser ' +
-              'tab only. Its name, size and type are saved; the binary is not.</p></div>' +
+            (ESH.store.apiMode()
+              ? '<p class="field__hint">The file uploads straight to encrypted Backblaze B2 storage. ' +
+                'The bucket is private: downloads are issued as short-lived signed links, and only to ' +
+                'people the access rules allow.</p>'
+              : '<p class="field__hint"><em>Demonstration limit:</em> the file stays in memory for this browser ' +
+                'tab only. Its name, size and type are saved; the binary is not.</p>') +
+            '<p class="field__hint" id="uploadProgress" hidden ' +
+              'role="status" style="font-variant-numeric:tabular-nums"></p></div>' +
           '<div class="field"><span class="field__label">Supplementary material (links)</span>' +
             '<div id="suppRows">' + supplementaryRows(r.supplementary) + '</div>' +
             '<button class="btn btn--sm btn--ghost" type="button" id="addSupp">+ Add another link</button></div>' +
@@ -235,6 +241,16 @@
         supplementary: supplementary,
         dataAvailability: f.elements.dataAvailability.value.trim()
       };
+      /* ---------------- API mode: save, then upload to B2 ----------------
+         The record is saved FIRST so the file has a report to belong to. The
+         server keys every object under its report id and will not sign a PUT
+         for a report you cannot edit, so there is no such thing as an orphan
+         upload floating free of a permission check. */
+      if (store.apiMode()) {
+        saveViaApi(patch, r, isEdit, intent, pendingFile, f);
+        return;
+      }
+
       if (pendingFile) patch.file = store.putBlob(pendingFile);
 
       var rec;
@@ -262,6 +278,67 @@
 
       router.navigate('#/report/' + rec.id);
     });
+  }
+
+  /* ==========================================================================
+     saveViaApi — the real path: server save, then a direct browser→B2 upload.
+
+       1. POST/PATCH the record          server checks can('report:create'/'report:edit')
+       2. POST …/upload-url              server checks can('file:upload'), mints the key,
+                                         returns a presigned PUT
+       3. PUT straight to Backblaze      the bytes never touch our server
+       4. POST …/file                    server HEADs the object, records the real size
+       5. optional status transition     server checks canTransition()
+
+     Every step is refused server-side if the policy says no, so a tampered
+     page can at worst make requests that get rejected.
+     ========================================================================== */
+  function saveViaApi(patch, existing, isEdit, intent, pendingFile, formEl) {
+    var api = ESH.api;
+    var buttons = [].slice.call(formEl.querySelectorAll('button[type=submit]'));
+    var progress = document.getElementById('uploadProgress');
+
+    function busy(on, label) {
+      buttons.forEach(function (b) { b.disabled = on; });
+      if (progress) {
+        progress.hidden = !on;
+        if (label) progress.textContent = label;
+      }
+    }
+
+    function fail(err) {
+      busy(false);
+      ui.toast(err && err.message ? err.message : 'Could not save the record.', 'err');
+    }
+
+    busy(true, 'Saving record…');
+
+    var saved = isEdit
+      ? api.reports.update(existing.id, patch).then(function (d) { return d.report; })
+      : api.reports.create(patch).then(function (d) { return d.report; });
+
+    saved.then(function (rec) {
+      if (!pendingFile) return rec;
+      busy(true, 'Uploading ' + pendingFile.name + '… 0%');
+      return api.uploadFile(rec.id, pendingFile, function (fraction) {
+        busy(true, 'Uploading ' + pendingFile.name + '… ' + Math.round(fraction * 100) + '%');
+      }).then(function (d) {
+        return d.report || rec;
+      });
+    }).then(function (rec) {
+      if (intent !== 'submit') return rec;
+      busy(true, 'Submitting for review…');
+      return api.reports.status(rec.id, 'submitted', 'Submitted for supervisor review.')
+        .then(function (d) { return d.report; });
+    }).then(function (rec) {
+      /* Re-pull so every other view sees the server's version, not ours. */
+      return store.hydrate().then(function () { return rec; });
+    }).then(function (rec) {
+      busy(false);
+      ui.toast(intent === 'submit' ? 'Submitted for review.'
+             : isEdit ? 'Changes saved.' : 'Draft saved.', 'good');
+      router.navigate('#/report/' + rec.id);
+    }).catch(fail);
   }
 
   /* ---------------- entry points ---------------- */

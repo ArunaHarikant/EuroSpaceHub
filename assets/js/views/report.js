@@ -250,6 +250,7 @@
       '</div>' +
     '</div>';
 
+    ui.bindFileControl(ctx.el);
     if (isPrivileged) wire(r, viewer, ctx);
   }
 
