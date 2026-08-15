@@ -136,6 +136,70 @@
   /* Route-level guard used by the router. Returns true, or a redirect route.
      A convenience, never the boundary: views re-check can() before writing,
      and the server re-checks everything again. */
+  /**
+   * notificationsFor(actor) — a derived "what happened while you were away"
+   * feed, built from existing report history + comments (no separate store).
+   * Scoping mirrors visibleReports():
+   *   · intern     → supervisor actions on THEIR OWN reports, and non-internal
+   *                  comments on them by someone else (the supervisor);
+   *   · supervisor → new submissions, and non-internal replies by interns.
+   * `unread` is relative to the actor's notificationsSeenAt marker. Newest
+   * first, capped. Internal comments never surface here.
+   */
+  function notificationsFor(u) {
+    u = (u === undefined) ? current : u;
+    if (!u) return [];
+    var sup = u.role === 'supervisor';
+    var seen = u.notificationsSeenAt ? new Date(u.notificationsSeenAt).getTime() : 0;
+    var out = [];
+
+    function quote(r) { return '“' + store.reportById(r.id).title + '”'; }
+    function push(at, reportId, kind, text) { out.push({ at: at, reportId: reportId, kind: kind, text: text }); }
+
+    store.reports().forEach(function (r) {
+      var mine = r.ownerId === u.id;
+      if (!sup && !mine) return;                       /* interns: own reports only */
+
+      (r.history || []).forEach(function (h) {
+        if (!h.to || h.from === h.to || h.by === u.id) return;   /* skip own actions + non-transitions */
+        if (sup) {
+          if (h.to === 'submitted') {
+            var au = store.userById(r.ownerId);
+            push(h.at, r.id, 'submitted', (au ? au.fullName : 'A researcher') + ' submitted ' + quote(r) + ' for review');
+          }
+        } else if (mine) {
+          var label = {
+            review:    'Your report ' + quote(r) + ' was opened for review',
+            revisions: 'Revisions requested on ' + quote(r),
+            approved:  quote(r) + ' was approved',
+            published: quote(r) + ' was published',
+            rejected:  quote(r) + ' was not accepted'
+          }[h.to];
+          if (label) push(h.at, r.id, h.to, label);
+        }
+      });
+
+      (r.comments || []).forEach(function (c) {
+        if (c.internal) return;                        /* internal notes are never notifications */
+        if (c.authorId === u.id) return;               /* not your own comment */
+        var author = store.userById(c.authorId);
+        if (sup) {
+          if (author && author.role === 'intern') push(c.at, r.id, 'comment', author.fullName + ' commented on ' + quote(r));
+        } else if (mine) {
+          push(c.at, r.id, 'comment', 'New review comment on ' + quote(r));
+        }
+      });
+    });
+
+    out.sort(function (a, b) { return new Date(b.at) - new Date(a.at); });
+    out = out.slice(0, 50);
+    out.forEach(function (it) { it.unread = new Date(it.at).getTime() > seen; });
+    return out;
+  }
+
+  /* Route-level guard used by the router. Returns true, or a redirect route.
+     A convenience, never the boundary: views re-check can() before writing,
+     and the server re-checks everything again. */
   function guard(requirement) {
     switch (requirement) {
       case 'auth':       return isAuthenticated() ? true : '#/signin';
@@ -153,7 +217,7 @@
     can: can, guard: guard,
     allowedTransitions: allowedTransitions, canTransition: canTransition,
     visibleReports: visibleReports, visibleComments: visibleComments,
-    projectUser: projectUser,
+    projectUser: projectUser, notificationsFor: notificationsFor,
     SHARED_USER_FIELDS: P.SHARED_USER_FIELDS
   };
 

@@ -42,17 +42,54 @@
     });
     var areaData = store.MISSION_AREAS.map(function (a) { return { label: a, value: byArea[a] }; });
 
+    /* Review turnaround: days from a record being Submitted to the supervisor's
+       first decision on it (opening for review, requesting revisions, approving
+       or rejecting). Answers "how long is work sitting with me?". */
+    var DECISIONS = ['review', 'revisions', 'approved', 'rejected'];
+    var turns = [];
+    reports.forEach(function (r) {
+      if (!r.submittedAt) return;
+      var sub = new Date(r.submittedAt).getTime();
+      var decided = null;
+      (r.history || []).forEach(function (h) {
+        if (decided !== null) return;
+        if (DECISIONS.indexOf(h.to) === -1) return;
+        var by = store.userById(h.by);
+        var at = new Date(h.at).getTime();
+        if (by && by.role === 'supervisor' && at >= sub) decided = at;
+      });
+      if (decided !== null) turns.push((decided - sub) / 86400000);
+    });
+    var avgTurn = turns.length
+      ? (turns.reduce(function (a, b) { return a + b; }, 0) / turns.length).toFixed(1) + ' days'
+      : '—';
+
+    /* Submissions over the last six calendar months (by submittedAt). */
+    var MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    var now = new Date(), months = [];
+    for (var m = 5; m >= 0; m--) {
+      var dt = new Date(now.getFullYear(), now.getMonth() - m, 1);
+      months.push({ key: dt.getFullYear() + '-' + (dt.getMonth() + 1), label: MON[dt.getMonth()], value: 0 });
+    }
+    reports.forEach(function (r) {
+      if (!r.submittedAt) return;
+      var d = new Date(r.submittedAt);
+      var key = d.getFullYear() + '-' + (d.getMonth() + 1);
+      months.forEach(function (mm) { if (mm.key === key) mm.value++; });
+    });
+
     return '' +
     '<section class="section">' +
       '<div class="section__head"><h2>Summary</h2>' +
         '<span class="meta">Across all researchers and all workflow states.</span></div>' +
-      '<div class="stats" style="margin-bottom:20px">' +
+      '<div class="stats mb-20">' +
         charts.statTile('Researchers', String(interns.length), activeInterns + ' currently active') +
         charts.statTile('Reports', String(reports.length), featured + ' featured in the library') +
         charts.statTile('Awaiting your action', String(awaiting), 'Submitted or under review') +
         charts.statTile('Shared records', String(live), 'Approved or published') +
+        charts.statTile('Avg. review turnaround', avgTurn, 'Submitted → your first decision') +
       '</div>' +
-      '<div class="grid grid--2">' +
+      '<div class="grid grid--2 mb-20">' +
         charts.horizontalBars({
           title: 'Reports by workflow state',
           subtitle: 'Every record currently in the hub.',
@@ -64,6 +101,11 @@
           data: areaData, color: 'var(--series-2)', unit: 'reports'
         }) +
       '</div>' +
+      charts.columnChart({
+        title: 'Submissions over time',
+        subtitle: 'Records submitted for review, by month (last six months).',
+        data: months, color: 'var(--series-1)', unit: 'submissions'
+      }) +
     '</section>';
   }
 
@@ -170,51 +212,77 @@
         }).join('')
       : '<p class="meta">No comments on this record yet.</p>';
 
-    return '<tr data-panelrow="' + esc(r.id) + '"><td colspan="' + colspan + '" style="background:var(--surface-1)">' +
-      '<div class="split" style="gap:20px;padding:6px 2px">' +
+    return '<tr data-panelrow="' + esc(r.id) + '"><td class="bg-1" colspan="' + colspan + '">' +
+      '<div class="split panelsplit">' +
         '<div>' +
-          '<h4 style="margin-bottom:10px">Review correspondence</h4>' + thread +
-          '<form data-quickcomment="' + esc(r.id) + '" style="margin-top:14px">' +
-            '<div class="field" style="margin-bottom:10px">' +
+          '<h4 class="mb-10">Review correspondence</h4>' + thread +
+          '<form data-quickcomment="' + esc(r.id) + '" class="mt-14">' +
+            '<div class="field mb-10">' +
               '<label class="sr-only" for="qc_' + esc(r.id) + '">Comment</label>' +
               '<textarea id="qc_' + esc(r.id) + '" name="body" rows="3" placeholder="Feedback for the author…"></textarea></div>' +
-            '<label class="checkline" style="margin-bottom:10px"><input type="checkbox" name="internal">' +
+            '<label class="checkline mb-10"><input type="checkbox" name="internal">' +
               '<span>Internal note — supervisors only.</span></label>' +
             '<button class="btn btn--sm btn--primary" type="submit">Post comment</button>' +
           '</form>' +
         '</div>' +
         '<div>' +
-          '<h4 style="margin-bottom:10px">Record</h4>' +
-          '<dl class="dl" style="grid-template-columns:minmax(80px,96px) minmax(0,1fr);font-size:.83rem">' +
+          '<h4 class="mb-10">Record</h4>' +
+          '<dl class="dl dl--compact">' +
             '<dt>Author</dt><dd>' + esc(store.authorLine(r)) + '</dd>' +
             '<dt>State</dt><dd>' + ui.statusBadge(r.status) + '</dd>' +
             '<dt>Submitted</dt><dd>' + esc(ui.fmtDate(r.submittedAt)) + '</dd>' +
             '<dt>Updated</dt><dd>' + esc(ui.fmtDate(r.updatedAt)) + '</dd>' +
             '<dt>File</dt><dd>' + (r.file ? esc(r.file.name) : '<span class="muted">none</span>') + '</dd>' +
           '</dl>' +
-          '<p class="meta" style="margin-top:10px">' + esc(ui.snippet(r.abstract, 40)) + '</p>' +
+          '<p class="meta mt-10">' + esc(ui.snippet(r.abstract, 40)) + '</p>' +
           '<hr>' +
           (transitions.length
-            ? '<div class="field" style="margin-bottom:10px"><label for="qs_' + esc(r.id) + '">Move to</label>' +
+            ? '<div class="field mb-10"><label for="qs_' + esc(r.id) + '">Move to</label>' +
               '<select id="qs_' + esc(r.id) + '" data-quickstatus="' + esc(r.id) + '">' +
                 transitions.map(function (k) { return '<option value="' + esc(k) + '">' + esc(store.STATUSES[k].label) + '</option>'; }).join('') +
               '</select></div>' +
               '<button class="btn btn--sm btn--primary" type="button" data-applystatus="' + esc(r.id) + '">Apply</button> '
             : '<p class="meta">No transitions available from this state.</p>') +
           (auth.can('report:feature', r, viewer)
-            ? '<label class="checkline" style="margin-top:12px"><input type="checkbox" data-quickfeature="' + esc(r.id) + '"' +
+            ? '<label class="checkline mt-12"><input type="checkbox" data-quickfeature="' + esc(r.id) + '"' +
               (r.featured ? ' checked' : '') + '><span>Featured in the report library</span></label>'
             : '') +
-          '<p style="margin-top:12px;margin-bottom:0"><a class="btn btn--sm" href="#/report/' + esc(r.id) + '">Open full record</a></p>' +
+          '<p class="mt-12 mb-0"><a class="btn btn--sm" href="#/report/' + esc(r.id) + '">Open full record</a></p>' +
         '</div>' +
       '</div>' +
     '</td></tr>';
   }
 
+  /* How long a record has waited in the review queue. Shown only for the two
+     states that are waiting on the supervisor; emphasised past two weeks. The
+     duration is always spelled out in text, so colour is never the only cue. */
+  function queueAge(r) {
+    if (r.status !== 'submitted' && r.status !== 'review') return '';
+    var d = ui.daysSince(r.submittedAt || r.updatedAt);
+    if (d === null) return '';
+    var text = d === 0 ? 'in queue today' : 'waiting ' + d + ' day' + (d === 1 ? '' : 's');
+    var stale = d >= 14;
+    return '<div class="queueage' + (stale ? ' queueage--stale' : '') + '">' +
+      (stale ? '<strong>' + text + '</strong>' : text) + '</div>';
+  }
+
   function reportTable(reports, interns, f, viewer) {
     var rows = reports.filter(function (r) { return matches(r, f); });
+    var hlTerms = f.q ? f.q.split(/\s+/).filter(Boolean) : null;
     var cmp = SORTS[f.sort] || SORTS.updated;
     rows.sort(function (a, b) { return f.dir === 'asc' ? cmp(a, b) : -cmp(a, b); });
+
+    /* pagination */
+    var PAGE_SIZE = 25;
+    var totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+    var page = Math.min(totalPages, Math.max(1, parseInt(f.page, 10) || 1));
+    var pageRows = rows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+    var makeHref = function (n) {
+      return '#/dashboard' + router.buildQuery({
+        q: f.q, status: f.status, area: f.area, type: f.type, intern: f.intern,
+        sort: f.sort, dir: f.dir, bucket: f.bucket, page: n > 1 ? n : ''
+      });
+    };
 
     var COLS = 9;
     var selCount = Object.keys(selected).filter(function (k) { return selected[k]; }).length;
@@ -248,10 +316,10 @@
         '</div>' +
       '</form>' +
 
-      '<div class="card" style="padding:12px 16px;margin-bottom:14px;display:flex;gap:12px;align-items:center;flex-wrap:wrap">' +
-        '<strong style="font-size:.85rem;color:var(--ink)">Bulk actions</strong>' +
+      '<div class="card toolbar mb-14">' +
+        '<strong class="toolbar__label">Bulk actions</strong>' +
         '<span class="meta" id="selCount">' + selCount + ' selected</span>' +
-        '<select id="bulkStatus" style="min-width:190px" aria-label="Bulk status target">' +
+        '<select id="bulkStatus" class="minw-190" aria-label="Bulk status target">' +
           '<option value="">Move selected to…</option>' +
           bulkTargets.map(function (k) { return '<option value="' + esc(k) + '">' + esc(store.STATUSES[k].label) + '</option>'; }).join('') +
         '</select>' +
@@ -259,11 +327,16 @@
         '<button class="btn btn--sm" type="button" id="bulkFeature"' + (selCount ? '' : ' disabled') + '>Feature selected</button>' +
         '<button class="btn btn--sm" type="button" id="bulkUnfeature"' + (selCount ? '' : ' disabled') + '>Remove featured</button>' +
         '<button class="btn btn--sm btn--ghost" type="button" id="bulkClear"' + (selCount ? '' : ' disabled') + '>Clear selection</button>' +
-        '<span class="meta" style="flex-basis:100%">Transitions that are not legal for a selected record are skipped and reported.</span>' +
+        '<span class="meta fb-100">Transitions that are not legal for a selected record are skipped and reported.</span>' +
       '</div>' +
 
-      '<p class="meta" role="status" style="margin-bottom:10px">Showing <strong>' + rows.length + '</strong> of ' +
-        reports.length + ' records.</p>' +
+      '<p class="meta mb-10" role="status">' +
+        (rows.length
+          ? 'Showing <strong>' + ((page - 1) * PAGE_SIZE + 1) + '–' + Math.min(page * PAGE_SIZE, rows.length) +
+            '</strong> of ' + rows.length + ' matching' +
+            (rows.length !== reports.length ? ' (of ' + reports.length + ' total)' : '') + '.'
+          : '0 of ' + reports.length + ' records match these filters.') +
+      '</p>' +
 
       '<div class="tablewrap"><table class="data"><thead><tr>' +
         '<th scope="col" class="rowcheck"><input type="checkbox" id="checkAll" aria-label="Select all shown"></th>' +
@@ -276,17 +349,17 @@
         th('updated', 'Updated', f) +
         '<th scope="col">Review</th>' +
       '</tr></thead><tbody>' +
-      (rows.length ? rows.map(function (r) {
+      (rows.length ? pageRows.map(function (r) {
         var owner = store.userById(r.ownerId);
         var open = openPanel === r.id;
         return '<tr>' +
           '<td class="rowcheck"><input type="checkbox" data-select="' + esc(r.id) + '"' + (selected[r.id] ? ' checked' : '') +
             ' aria-label="Select ' + esc(r.title) + '"></td>' +
-          '<td><a class="rowtitle" href="#/report/' + esc(r.id) + '">' + esc(ui.snippet(r.title, 12)) + '</a>' +
+          '<td><a class="rowtitle" href="#/report/' + esc(r.id) + '">' + ui.highlight(ui.snippet(r.title, 12), hlTerms) + '</a>' +
             (r.featured ? ' ' + ui.featuredBadge() : '') +
             ((r.comments || []).length ? ' <span class="meta">· ' + r.comments.length + ' comment' + (r.comments.length === 1 ? '' : 's') + '</span>' : '') + '</td>' +
           '<td class="nowrap">' + (owner ? '<a href="#/researcher/' + esc(owner.id) + '">' + esc(owner.fullName) + '</a>' : '<span class="muted">—</span>') + '</td>' +
-          '<td class="nowrap">' + ui.statusBadge(r.status) + '</td>' +
+          '<td class="nowrap">' + ui.statusBadge(r.status) + queueAge(r) + '</td>' +
           '<td class="nowrap">' + esc(r.missionArea) + '</td>' +
           '<td class="nowrap">' + esc(r.reportType) + '</td>' +
           '<td class="nowrap meta">' + esc(r.submittedAt ? ui.fmtDate(r.submittedAt) : '—') + '</td>' +
@@ -296,6 +369,7 @@
         '</tr>' + (open ? feedbackPanel(r, viewer, COLS) : '');
       }).join('') : '<tr><td colspan="' + COLS + '" class="muted">No records match these filters.</td></tr>') +
       '</tbody></table></div>' +
+      ui.pager(page, totalPages, makeHref) +
     '</section>';
   }
 
@@ -316,7 +390,8 @@
       intern: ctx.query.intern || 'all',
       sort:   ctx.query.sort   || 'updated',
       dir:    ctx.query.dir    || 'desc',
-      bucket: ctx.query.bucket || ''
+      bucket: ctx.query.bucket || '',
+      page:   ctx.query.page   || '1'
     };
 
     ctx.el.innerHTML =
@@ -342,6 +417,15 @@
       };
       Object.keys(patch).forEach(function (k) { q[k] = patch[k]; });
       router.navigate('#/dashboard' + router.buildQuery(q));
+    }
+
+    /* Re-render the current view in place while keeping the scroll position —
+       the router otherwise jumps to the top after every resolve(). Used for
+       in-page actions (status, bulk, opening a panel) rather than navigation. */
+    function resolveKeepScroll() {
+      var y = global.scrollY || 0;
+      router.resolve();
+      if (typeof global.scrollTo === 'function') global.scrollTo(0, y);
     }
 
     var form = document.getElementById('dashFilters');
@@ -385,7 +469,7 @@
       refreshSelUI(ctx);
     });
     document.getElementById('bulkClear').addEventListener('click', function () {
-      selected = {}; router.resolve();
+      selected = {}; resolveKeepScroll();
     });
 
     /* bulk status */
@@ -409,7 +493,7 @@
           selected = {};
           ui.toast(legal.length + ' record' + (legal.length === 1 ? '' : 's') + ' updated' +
                    (skipped ? '; ' + skipped + ' skipped.' : '.'), 'good');
-          router.resolve();
+          resolveKeepScroll();
         });
     });
 
@@ -428,7 +512,7 @@
       ui.toast(done + ' record' + (done === 1 ? '' : 's') + (on ? ' featured' : ' unfeatured') +
         (skipped ? '; ' + skipped + ' skipped (only approved or published records can be featured).' : '.'),
         skipped ? 'err' : 'good');
-      router.resolve();
+      resolveKeepScroll();
     }
     document.getElementById('bulkFeature').addEventListener('click', function () { bulkFeature(true); });
     document.getElementById('bulkUnfeature').addEventListener('click', function () { bulkFeature(false); });
@@ -438,7 +522,7 @@
       b.addEventListener('click', function () {
         var id = b.getAttribute('data-panel');
         openPanel = (openPanel === id) ? null : id;
-        router.resolve();
+        resolveKeepScroll();
       });
     });
 
@@ -450,9 +534,22 @@
         if (!body) { ui.fieldError(fm.elements.body, 'Enter a comment.'); return; }
         var r = store.reportById(id);
         if (!auth.can('comment:write', r, viewer)) { ui.toast('Not permitted.', 'err'); return; }
-        store.addComment(id, viewer.id, body, null, fm.elements.internal.checked);
-        ui.toast(fm.elements.internal.checked ? 'Internal note added.' : 'Comment posted.', 'good');
-        router.resolve();
+        var internal = fm.elements.internal.checked;
+        store.addComment(id, viewer.id, body, null, internal);
+        /* Append the new comment in place — no full re-render, so the open panel
+           and the scroll position are preserved. */
+        var container = fm.parentNode;
+        var placeholder = container.querySelector(':scope > p.meta');
+        if (placeholder) placeholder.remove();
+        fm.insertAdjacentHTML('beforebegin',
+          '<div class="comment' + (internal ? ' comment--internal' : '') + '">' +
+            '<div class="comment__head"><span class="comment__who">' + esc(viewer.fullName) + '</span>' +
+            (internal ? '<span class="badge badge--featured">Internal</span>' : '') +
+            '<span class="comment__when">' + esc(ui.fmtDateTime(store.nowISO())) + '</span></div>' +
+            '<p class="comment__body">' + esc(body) + '</p>' +
+          '</div>');
+        fm.reset();
+        ui.toast(internal ? 'Internal note added.' : 'Comment posted.', 'good');
       });
     });
 
@@ -465,7 +562,7 @@
         if (!auth.canTransition(r, sel.value, viewer)) { ui.toast('That transition is not permitted.', 'err'); return; }
         store.setStatus(id, sel.value, viewer.id, 'Changed from the dashboard.');
         ui.toast('Moved to ' + store.STATUSES[sel.value].label + '.', 'good');
-        router.resolve();
+        resolveKeepScroll();
       });
     });
 

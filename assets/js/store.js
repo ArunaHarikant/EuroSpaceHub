@@ -30,6 +30,38 @@
   var TRANSITIONS    = P.TRANSITIONS;
   var STANDING       = P.STANDING;
   var ACCEPTED_FILES = P.ACCEPTED_FILES;
+  /* Suggested (not enforced) canonical institutions. Free text is still
+     accepted; these drive the datalists and canonicalInstitution() so the same
+     place isn't spelled three ways across the roster and filters. */
+  var INSTITUTIONS = [
+    'International Space University',
+    'Vrije Universiteit Amsterdam',
+    'Florida Institute of Technology',
+    'ISAE-SUPAERO',
+    'Delft University of Technology',
+    'Technical University of Munich',
+    'University of Strathclyde'
+  ];
+  var INSTITUTION_ALIASES = {
+    'isu': 'International Space University',
+    'vu': 'Vrije Universiteit Amsterdam',
+    'vu amsterdam': 'Vrije Universiteit Amsterdam',
+    'fit': 'Florida Institute of Technology',
+    'florida tech': 'Florida Institute of Technology',
+    'tu delft': 'Delft University of Technology',
+    'tum': 'Technical University of Munich'
+  };
+
+  /* Optional campaign / programme a report belongs to — a lightweight grouping,
+     not a first-class entity. Example labels drawn from Prof. Foing's real
+     ILEWG context; the field is free text and never enforced. */
+  var CAMPAIGNS = [
+    'EuroMoonMars',
+    'ILEWG analogue field campaign',
+    'ExoGeoLab',
+    'Lunar south-pole study',
+    'Mars analogue programme'
+  ];
 
   /* ---------------- ids, dates, misc ---------------- */
 
@@ -174,6 +206,7 @@
       title: o.title,
       missionArea: o.missionArea,
       reportType: o.reportType,
+      campaign: o.campaign || '',            /* optional grouping label */
       abstract: o.abstract,
       keywords: o.keywords || [],
       coAuthors: o.coAuthors || [],          /* [{ name, userId|null }] */
@@ -197,7 +230,7 @@
       mkReport({
         id: 'r_1', ownerId: 'u_i1',
         title: 'Sample Lunar Regolith Report — Geotechnical Characterisation of South-Polar Simulants',
-        missionArea: 'Lunar', reportType: 'Research paper',
+        missionArea: 'Lunar', reportType: 'Research paper', campaign: 'EuroMoonMars',
         abstract: 'Placeholder abstract. This sample record demonstrates how an approved research paper appears in the public library. It describes a notional laboratory campaign characterising the shear strength and compaction behaviour of lunar highland regolith simulants under reduced-pressure conditions, and discusses implications for in-situ resource utilisation and surface mobility at the lunar south pole. All content is placeholder text for demonstration purposes and does not represent real research findings.',
         keywords: ['regolith','ISRU','geotechnics','south pole'],
         coAuthors: [{ name: 'Intern Name D', userId: 'u_i4' }, { name: 'External Collaborator', userId: null }],
@@ -223,7 +256,7 @@
       mkReport({
         id: 'r_2', ownerId: 'u_i2',
         title: 'Sample Mars Report — Stereo-Derived Topography of a Placeholder Crater Region',
-        missionArea: 'Mars', reportType: 'Technical report',
+        missionArea: 'Mars', reportType: 'Technical report', campaign: 'Mars analogue programme',
         abstract: 'Placeholder abstract. This sample technical report illustrates a Mars-focused submission. It outlines a notional workflow for deriving digital terrain models from high-resolution stereo imagery, quantifying vertical uncertainty, and comparing the result against an independent laser-altimetry reference. Content is placeholder text and does not represent real results.',
         keywords: ['HRSC','topography','DTM','stereo photogrammetry'],
         coAuthors: [],
@@ -243,7 +276,7 @@
       mkReport({
         id: 'r_3', ownerId: 'u_i3',
         title: 'Sample Analogue Mission Report — Placeholder Habitat Campaign, Environmental Monitoring',
-        missionArea: 'Both', reportType: 'Analogue mission report',
+        missionArea: 'Both', reportType: 'Analogue mission report', campaign: 'EuroMoonMars',
         abstract: 'Placeholder abstract. A sample analogue-mission record covering environmental and life-support monitoring during a notional two-week isolated-habitat campaign, with lessons applicable to both lunar and Martian surface operations. Content is placeholder text for demonstration only.',
         keywords: ['analogue','habitat','life support','human factors'],
         coAuthors: [{ name: 'Intern Name A', userId: 'u_i1' }],
@@ -414,6 +447,16 @@
 
   function getState() { return state || load(); }
 
+  /* Replace all data with a previously exported object. Validates the shape
+     before committing so a malformed file cannot corrupt the store. Returns
+     true on success. */
+  function importState(obj) {
+    if (!obj || obj.version !== 1 || !Array.isArray(obj.users) || !Array.isArray(obj.reports)) return false;
+    state = { version: 1, seededAt: obj.seededAt || nowISO(), users: obj.users, reports: obj.reports };
+    save();
+    return true;
+  }
+
   /* ---------------- queries ---------------- */
 
   function users()   { return getState().users.slice(); }
@@ -444,6 +487,73 @@
      session, so this is NOT a public flag. */
   var isReleased = P.isReleased;
   function releasedReports() { return getState().reports.filter(isReleased); }
+
+  /* ---------------- controlled-vocabulary helpers ----------------
+     None of these ENFORCE a closed list — unknown values pass through as free
+     text. They just fold obvious variants together (aliases, casing, spacing)
+     so the roster, filters and library facets don't fragment. */
+
+  function canonicalInstitution(s) {
+    var t = String(s || '').trim();
+    if (!t) return '';
+    var key = t.toLowerCase();
+    if (INSTITUTION_ALIASES[key]) return INSTITUTION_ALIASES[key];
+    for (var i = 0; i < INSTITUTIONS.length; i++) {
+      if (INSTITUTIONS[i].toLowerCase() === key) return INSTITUTIONS[i];
+    }
+    return t;
+  }
+
+  /* Fold a campaign onto a canonical spelling when it matches one, else keep the
+     free text. */
+  function canonicalCampaign(s) {
+    var t = String(s || '').replace(/\s+/g, ' ').trim();
+    if (!t) return '';
+    var key = t.toLowerCase();
+    for (var i = 0; i < CAMPAIGNS.length; i++) {
+      if (CAMPAIGNS[i].toLowerCase() === key) return CAMPAIGNS[i];
+    }
+    return t;
+  }
+
+  /* Distinct campaigns actually present on reports — drives the library filter. */
+  function campaignsInUse() {
+    var set = {};
+    getState().reports.forEach(function (r) { if (r.campaign) set[r.campaign] = true; });
+    return Object.keys(set).sort();
+  }
+
+  /* Trim, collapse inner whitespace, and drop case-insensitive duplicates
+     (keeping the first spelling seen). */
+  function canonicalKeywords(list) {
+    var seen = {}, out = [];
+    (list || []).forEach(function (k) {
+      var t = String(k || '').replace(/\s+/g, ' ').trim();
+      if (!t) return;
+      var key = t.toLowerCase();
+      if (seen[key]) return;
+      seen[key] = true;
+      out.push(t);
+    });
+    return out;
+  }
+
+  /* Existing keywords across all reports, most-used first — for suggestions. */
+  function suggestedKeywords() {
+    var freq = {};
+    getState().reports.forEach(function (r) {
+      (r.keywords || []).forEach(function (k) {
+        var t = String(k || '').trim();
+        if (!t) return;
+        var key = t.toLowerCase();
+        if (!freq[key]) freq[key] = { label: t, n: 0 };
+        freq[key].n++;
+      });
+    });
+    return Object.keys(freq).map(function (key) { return freq[key]; })
+      .sort(function (a, b) { return b.n - a.n || a.label.localeCompare(b.label); })
+      .map(function (x) { return x.label; });
+  }
 
   /* Display name for a report's author line. */
   function authorLine(r) {
@@ -477,10 +587,21 @@
     return u;
   }
 
+  /* Marks the point up to which a user has seen their notifications. Anything
+     that happened after this timestamp is "unread". A missing value (never
+     visited) means everything is unread. */
+  function markNotificationsSeen(userId) {
+    var u = userById(userId);
+    if (!u) return null;
+    u.notificationsSeenAt = nowISO();
+    save();
+    return u;
+  }
+
   function addReport(r) {
     var rec = mkReport(Object.assign({
       id: uid('r'), ownerId: '', title: '', missionArea: 'Lunar',
-      reportType: 'Research paper', abstract: '', keywords: [], coAuthors: [],
+      reportType: 'Research paper', campaign: '', abstract: '', keywords: [], coAuthors: [],
       file: null, supplementary: [], dataAvailability: '', status: 'draft',
       featured: false, createdAt: nowISO(), submittedAt: null, updatedAt: nowISO(),
       history: [], comments: []
@@ -547,11 +668,22 @@
   var RESET_TTL_MS = 30 * 60 * 1000;   /* 30 minutes */
 
   function randomToken() {
-    var out = '', chars = 'abcdefghijkmnpqrstuvwxyz23456789';
-    var buf = new Uint8Array(24);
-    if (global.crypto && global.crypto.getRandomValues) global.crypto.getRandomValues(buf);
-    else for (var j = 0; j < buf.length; j++) buf[j] = Math.floor(Math.random() * 256);
-    for (var i = 0; i < buf.length; i++) out += chars[buf[i] % chars.length];
+    var chars = 'abcdefghijkmnpqrstuvwxyz23456789';   /* 31 symbols */
+    /* Reject byte values in the incomplete final block so `% n` is unbiased:
+       31 does not divide 256, so a naive modulo would make the first 8 symbols
+       ~12.5% likelier. limit = floor(256 / n) * n = 248. */
+    var n = chars.length, limit = Math.floor(256 / n) * n;
+    var byte = new Uint8Array(1);
+    function nextByte() {
+      if (global.crypto && global.crypto.getRandomValues) global.crypto.getRandomValues(byte);
+      else byte[0] = Math.floor(Math.random() * 256);
+      return byte[0];
+    }
+    var out = '';
+    while (out.length < 24) {
+      var b = nextByte();
+      if (b < limit) out += chars[b % n];
+    }
     return out;
   }
 
@@ -667,18 +799,23 @@
     KEY: KEY, SESSION_KEY: SESSION_KEY, SUPERVISOR_ID: SUPERVISOR_ID,
     MISSION_AREAS: MISSION_AREAS, REPORT_TYPES: REPORT_TYPES,
     STATUSES: STATUSES, STATUS_ORDER: STATUS_ORDER, TRANSITIONS: TRANSITIONS,
-    STANDING: STANDING, ACCEPTED_FILES: ACCEPTED_FILES,
+    STANDING: STANDING, ACCEPTED_FILES: ACCEPTED_FILES, INSTITUTIONS: INSTITUTIONS,
+    CAMPAIGNS: CAMPAIGNS,
+    canonicalInstitution: canonicalInstitution, canonicalKeywords: canonicalKeywords,
+    suggestedKeywords: suggestedKeywords, canonicalCampaign: canonicalCampaign,
+    campaignsInUse: campaignsInUse,
 
     load: load, save: save, reset: reset, getState: getState, uid: uid, nowISO: nowISO,
     apiMode: apiMode, hydrate: hydrate, createReport: createReport,
     setSyncErrorHandler: setSyncErrorHandler,
+    importState: importState,
 
     users: users, interns: interns, supervisors: supervisors,
     userById: userById, userByEmail: userByEmail,
     reports: reports, reportById: reportById, reportsByOwner: reportsByOwner,
     releasedReports: releasedReports, isReleased: isReleased, authorLine: authorLine,
 
-    addUser: addUser, updateUser: updateUser,
+    addUser: addUser, updateUser: updateUser, markNotificationsSeen: markNotificationsSeen,
     addReport: addReport, updateReport: updateReport,
     setStatus: setStatus, logHistory: logHistory, addComment: addComment,
 

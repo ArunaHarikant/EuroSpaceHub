@@ -185,6 +185,21 @@ hr { border: 0; border-top: 1px solid var(--line); margin: 1.75rem 0; }
 
 .topbar__session { flex: none; display: flex; align-items: center; gap: 10px; }
 
+/* notification bell + unread count */
+.notifbell {
+  position: relative; display: inline-flex; align-items: center; justify-content: center;
+  width: 36px; height: 32px; flex: none; color: var(--ink-2);
+  border: 1px solid var(--line-strong); border-radius: var(--radius-sm);
+}
+.notifbell:hover { background: var(--surface-3); color: var(--ink); text-decoration: none; }
+.notif-count {
+  position: absolute; top: -6px; right: -6px; min-width: 16px; height: 16px; padding: 0 4px;
+  border-radius: 999px; background: var(--st-critical); color: #fff;
+  font-size: .64rem; font-weight: 700; line-height: 1;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.notif-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); margin-right: 8px; vertical-align: middle; }
+
 /* ---------- sub nav ---------- */
 .subnav { background: var(--surface-2); border-bottom: 1px solid var(--line); position: sticky; top: 64px; z-index: 30; }
 .subnav__inner { display: flex; align-items: center; gap: 2px; overflow-x: auto; scrollbar-width: thin; }
@@ -271,6 +286,8 @@ hr { border: 0; border-top: 1px solid var(--line); margin: 1.75rem 0; }
 .badge--inactive  { color: #b8c2d4; border-color: rgba(184,194,212,.30); background: rgba(184,194,212,.07); }
 .badge--alumnus   { color: #b6a4f0; border-color: rgba(144,133,233,.45); background: rgba(144,133,233,.12); }
 .badge--role      { color: var(--accent-hi); border-color: var(--accent-ring); background: var(--accent-dim); }
+.badge--campaign  { color: #b6a4f0; border-color: rgba(144,133,233,.40); background: rgba(144,133,233,.10); }
+:root[data-theme="light"] .badge--campaign { color: #6d28d9; border-color: rgba(109,40,217,.35); background: rgba(109,40,217,.08); }
 
 .tag {
   display: inline-block; font-size: .74rem; padding: 3px 9px; border-radius: 4px;
@@ -469,6 +486,34 @@ table.data td.nowrap { white-space: nowrap; }
 .empty { text-align: center; padding: 46px 20px; color: var(--ink-3); border: 1px dashed var(--line-strong); border-radius: var(--radius); }
 .empty h3 { color: var(--ink-2); }
 
+/* ---------- breadcrumbs ---------- */
+.crumbs { margin-bottom: 14px; }
+.crumbs ol { list-style: none; display: flex; flex-wrap: wrap; align-items: center; gap: 7px; margin: 0; padding: 0; font-size: .8rem; }
+.crumbs li { display: inline-flex; align-items: center; gap: 7px; color: var(--ink-3); }
+.crumbs li + li::before { content: "/"; color: var(--ink-3); opacity: .55; }
+.crumbs a { color: var(--ink-3); }
+.crumbs a:hover { color: var(--accent-hi); }
+.crumbs [aria-current="page"] { color: var(--ink-2); }
+
+/* ---------- search-match highlight ---------- */
+mark { background: rgba(250,178,25,.28); color: inherit; border-radius: 3px; padding: 0 1px; }
+:root[data-theme="light"] mark { background: rgba(250,178,25,.45); }
+
+/* ---------- review-queue age ---------- */
+.queueage { font-size: .72rem; color: var(--ink-3); margin-top: 3px; white-space: nowrap; }
+.queueage--stale { color: var(--st-warning); }
+.queueage--stale strong { font-weight: 700; }
+
+/* ---------- pager ---------- */
+.pager { display: flex; align-items: center; justify-content: center; gap: 14px; margin-top: 22px; }
+.pager__status { font-size: .82rem; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+
+/* ---------- keyword suggestions ---------- */
+.kwsuggest { margin-top: 8px; display: flex; align-items: center; flex-wrap: wrap; gap: 6px; }
+.kwsuggest__label { font-size: .78rem; color: var(--ink-3); }
+.kwsuggest__chip { cursor: pointer; font: inherit; font-size: .74rem; }
+.kwsuggest__chip:hover { background: var(--surface-4); color: var(--ink); }
+
 /* ---------- toasts ---------- */
 .toasts { position: fixed; right: 18px; bottom: 18px; z-index: 100; display: flex; flex-direction: column; gap: 9px; max-width: min(94vw, 380px); }
 .toast {
@@ -504,6 +549,74 @@ table.data td.nowrap { white-space: nowrap; }
 .linklist a:hover { color: var(--accent-hi); }
 .footer__note { font-size: .78rem !important; font-style: italic; }
 .footer__bar { border-top: 1px solid var(--line); padding-block: 15px; display: flex; justify-content: space-between; gap: 14px; flex-wrap: wrap; color: var(--ink-3); font-size: .8rem; }
+.footer__tools { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.footer__tools .linkbtn { cursor: pointer; }
+
+/* ==========================================================================
+   Utilities
+   A small, documented layer the view templates use in place of inline
+   `style="…"`. Every value here reproduces exactly what an inline style used
+   to set, so this is a readability refactor with no intended visual change.
+   Declared late so single-class utilities win over the component rules above
+   (e.g. .wrap--620 over .wrap, .toolbar over .card, .dl--narrow over .dl).
+   ========================================================================== */
+
+/* spacing — only the margin steps the views actually use */
+.m-0   { margin: 0; }
+.mt-0  { margin-top: 0; }     .mb-0  { margin-bottom: 0; }
+.mt-8  { margin-top: 8px; }   .mb-4  { margin-bottom: 4px; }
+.mt-10 { margin-top: 10px; }  .mb-6  { margin-bottom: 6px; }
+.mt-12 { margin-top: 12px; }  .mb-8  { margin-bottom: 8px; }
+.mt-14 { margin-top: 14px; }  .mb-10 { margin-bottom: 10px; }
+.mt-18 { margin-top: 18px; }  .mb-12 { margin-bottom: 12px; }
+.mt-20 { margin-top: 20px; }  .mb-14 { margin-bottom: 14px; }
+.mt-24 { margin-top: 24px; }  .mb-20 { margin-bottom: 20px; }
+.mt-26 { margin-top: 26px; }
+.mi-auto { margin-inline: auto; }
+
+/* constrained page widths (override .wrap max-width on forms / detail pages) */
+.wrap--620 { max-width: 620px; }
+.wrap--640 { max-width: 640px; }
+.wrap--680 { max-width: 680px; }
+.wrap--840 { max-width: 840px; }
+.wrap--880 { max-width: 880px; }
+.wrap--900 { max-width: 900px; }
+
+/* text helpers */
+.prewrap  { white-space: pre-wrap; }
+.tnum     { font-variant-numeric: tabular-nums; }
+.text-ink { color: var(--ink); }
+.fs-98    { font-size: .98rem; }
+.fs-105   { font-size: 1.05em; }
+
+/* layout helpers */
+.d-block   { display: block; }
+.jc-center { justify-content: center; }
+.grid-8    { display: grid; gap: 8px; }
+.grid-9    { display: grid; gap: 9px; }
+.bg-1      { background: var(--surface-1); }
+.minw-190  { min-width: 190px; }
+.fb-100    { flex-basis: 100%; }
+.flush     { border: 0; border-radius: 0; }
+.btn-row--tight { flex-wrap: nowrap; gap: 6px; }
+
+/* recurring composites */
+.profilehead        { display: flex; gap: 20px; align-items: flex-start; flex-wrap: wrap; }
+.profilehead__body  { flex: 1 1 320px; }
+.dl--narrow  { grid-template-columns: minmax(90px,110px) minmax(0,1fr); }
+.dl--compact { grid-template-columns: minmax(80px,96px) minmax(0,1fr); font-size: .83rem; }
+.toolbar        { padding: 12px 16px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.toolbar__label { font-size: .85rem; color: var(--ink); }
+.panelsplit { gap: 20px; padding: 6px 2px; }
+.btn--menu  { justify-content: flex-start; text-align: left; height: auto; padding: 10px 12px; }
+.card--flag { border-color: rgba(250,178,25,.35); }
+.link-plain, .link-plain:hover { text-decoration: none; }
+
+/* scrollable multi-select box (co-author picker on the submission form) */
+.pickbox {
+  display: grid; gap: 6px; max-height: 190px; overflow: auto; padding: 10px;
+  border: 1px solid var(--line-strong); border-radius: var(--radius-sm); background: var(--surface-3);
+}
 
 /* ---------- responsive nav ---------- */
 @media (max-width: 1080px) {
@@ -533,3 +646,84 @@ table.data td.nowrap { white-space: nowrap; }
 .demo-banner--live .demo-banner__text { color: #bcd4f2; }
 .demo-banner--live .demo-banner__text a { color: #8fc0ff; }
 .demo-banner--live .demo-banner__close { color: #bcd4f2; }
+/* ==========================================================================
+   LIGHT THEME (opt-in)
+   Dark is the default identity (the :root tokens above). Light is applied only
+   when the header toggle sets <html data-theme="light">; there is no
+   prefers-color-scheme auto-switch. Most surfaces recolour for free because
+   they read from tokens — the extra rules below cover the handful of places
+   that hard-code a dark-mode colour (badges, the demo banner, the hero veil
+   and the decorative backdrop). The two chart hues and every badge text colour
+   were re-validated for >= 4.4:1 against the light card/table surfaces.
+   ========================================================================== */
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  --plane:        #eaeef4;
+  --surface-1:    #f4f7fb;
+  --surface-2:    #ffffff;   /* card / chart surface */
+  --surface-3:    #eef2f7;   /* raised: table head, inputs */
+  --surface-4:    #e3e9f2;   /* hover */
+
+  --ink:          #0b1220;
+  --ink-2:        #33415c;
+  --ink-3:        #5b6a7e;
+
+  --line:         rgba(15,23,42,0.12);
+  --line-strong:  rgba(15,23,42,0.22);
+  --grid:         rgba(15,23,42,0.09);
+
+  --accent:       #2563c4;
+  --accent-hi:    #1f57ad;
+  --accent-dim:   rgba(37,99,196,0.10);
+  --accent-ring:  rgba(37,99,196,0.38);
+
+  --series-1:     #2563c4;   /* revalidated: 5.74:1 on #fff */
+  --series-2:     #c2410c;   /* revalidated: 5.18:1 on #fff */
+
+  --shadow:       0 1px 2px rgba(15,23,42,.10), 0 10px 28px rgba(15,23,42,.10);
+}
+
+/* primary button: dark ink on the lighter accent fails contrast — use white */
+:root[data-theme="light"] .btn--primary { color: #fff; }
+
+/* status badges — light tints with darker text (all >= 4.4:1 on the tint) */
+:root[data-theme="light"] .badge--draft     { color: #475569; border-color: rgba(71,85,105,.35);  background: rgba(71,85,105,.08); }
+:root[data-theme="light"] .badge--submitted { color: #1d4ed8; border-color: rgba(37,99,196,.40);  background: rgba(37,99,196,.10); }
+:root[data-theme="light"] .badge--review    { color: #92600a; border-color: rgba(202,138,4,.45);  background: rgba(250,178,25,.16); }
+:root[data-theme="light"] .badge--revisions { color: #b45309; border-color: rgba(217,119,6,.45);   background: rgba(236,131,90,.16); }
+:root[data-theme="light"] .badge--approved  { color: #15803d; border-color: rgba(21,128,61,.40);   background: rgba(21,128,61,.10); }
+:root[data-theme="light"] .badge--published { color: #0f766e; border-color: rgba(15,118,110,.45);  background: rgba(15,118,110,.12); }
+:root[data-theme="light"] .badge--rejected  { color: #b91c1c; border-color: rgba(185,28,28,.40);   background: rgba(185,28,28,.10); }
+:root[data-theme="light"] .badge--withdrawn { color: #64748b; border-color: rgba(100,116,139,.35); background: rgba(100,116,139,.08); }
+:root[data-theme="light"] .badge--featured  { color: #92600a; border-color: rgba(202,138,4,.50);   background: rgba(250,178,25,.16); }
+:root[data-theme="light"] .badge--active    { color: #15803d; border-color: rgba(21,128,61,.40);   background: rgba(21,128,61,.10); }
+:root[data-theme="light"] .badge--inactive  { color: #475569; border-color: rgba(71,85,105,.30);   background: rgba(71,85,105,.07); }
+:root[data-theme="light"] .badge--alumnus   { color: #6d28d9; border-color: rgba(109,40,217,.40);  background: rgba(109,40,217,.10); }
+
+/* amber demo banner recoloured for a light background */
+:root[data-theme="light"] .demo-banner { background: #fdf5e2; border-bottom-color: rgba(202,138,4,.35); }
+:root[data-theme="light"] .demo-banner__text { color: #7a5c00; }
+:root[data-theme="light"] .demo-banner__text a { color: #8a5a00; }
+:root[data-theme="light"] .demo-banner__close { color: #7a5c00; }
+
+/* internal-comment / flagged surfaces read better with a warmer light tint */
+:root[data-theme="light"] .comment--internal { background: rgba(250,178,25,.10); }
+:root[data-theme="light"] .notice--locked { background: rgba(250,178,25,.10); }
+
+/* hero veil: swap the dark wash for a light one so the backdrop still reads */
+:root[data-theme="light"] .hero {
+  background:
+    radial-gradient(1100px 420px at 78% -14%, rgba(37,99,196,.12), transparent 62%),
+    radial-gradient(700px 340px at 8% 108%, rgba(217,89,38,.07), transparent 60%),
+    linear-gradient(180deg, rgba(255,255,255,.86) 0%, rgba(255,255,255,.62) 55%, rgba(255,255,255,.82) 100%);
+}
+
+/* decorative backdrop: its stars and thin limbs are light-on-dark by default */
+:root[data-theme="light"] .bd-stars circle { fill: #64748b; }
+:root[data-theme="light"] .bd-limb { stroke: rgba(15,23,42,.18); }
+:root[data-theme="light"] .bd-cap  { fill: rgba(15,23,42,.14); }
+
+/* header theme toggle */
+.themetoggle { padding: 6px 8px; }
+.themetoggle svg { display: block; }

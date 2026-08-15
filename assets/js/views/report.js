@@ -62,7 +62,7 @@
           ? roots.map(function (c) { return commentNode(r, c, visible, viewer); }).join('')
           : '<p class="meta">No comments on this record yet.</p>') +
         (canWrite
-          ? '<form id="commentForm" style="margin-top:18px">' +
+          ? '<form id="commentForm" class="mt-18">' +
               '<input type="hidden" name="parentId" value="">' +
               '<div class="field">' +
                 '<label for="cbody">Add a comment</label>' +
@@ -70,13 +70,13 @@
                 '<p class="field__hint" id="replyHint" hidden></p>' +
               '</div>' +
               (canInternal
-                ? '<label class="checkline" style="margin-bottom:12px"><input type="checkbox" name="internal">' +
+                ? '<label class="checkline mb-12"><input type="checkbox" name="internal">' +
                   '<span>Internal note — visible to supervisors only. Not shown to the author or the public.</span></label>'
                 : '') +
               '<div class="btn-row"><button class="btn btn--primary btn--sm" type="submit">Post comment</button>' +
               '<button class="btn btn--sm btn--ghost" type="button" id="cancelReply" hidden>Cancel reply</button></div>' +
             '</form>'
-          : '<p class="meta" style="margin-top:14px">You do not have permission to comment on this record.</p>') +
+          : '<p class="meta mt-14">You do not have permission to comment on this record.</p>') +
       '</div>' +
     '</section>';
   }
@@ -174,7 +174,11 @@
 
     ctx.el.innerHTML =
     '<div class="wrap">' +
-      '<p class="meta" style="margin-bottom:10px"><a href="#/library">&larr; Report library</a></p>' +
+      ui.breadcrumbs([
+        { label: 'Research Hub', href: '#/' },
+        { label: 'Report library', href: '#/library' },
+        { label: ui.snippet(r.title, 8) }
+      ]) +
 
       (!released && isPrivileged
         ? ui.notice('warn', 'Not shared with the group',
@@ -182,7 +186,7 @@
             'in the report library. Only you and the supervisor can open this page.')
         : '') +
 
-      '<div class="reportcard__top" style="margin-bottom:10px">' +
+      '<div class="reportcard__top mb-10">' +
         '<span class="badge">' + esc(r.missionArea) + '</span>' +
         '<span class="badge">' + esc(r.reportType) + '</span>' +
         (r.featured ? ui.featuredBadge() : '') +
@@ -190,16 +194,17 @@
       '</div>' +
 
       '<h1>' + esc(r.title) + '</h1>' +
-      '<p class="lede" style="font-size:.98rem">' + esc(store.authorLine(r)) + '</p>' +
+      '<p class="lede fs-98">' + esc(store.authorLine(r)) + '</p>' +
+      '<div class="btn-row"><button class="btn btn--sm" type="button" id="citeBtn">Cite this record</button></div>' +
 
-      '<div class="split" style="margin-top:26px">' +
+      '<div class="split mt-26">' +
         '<div>' +
-          '<section class="card" style="margin-bottom:20px">' +
+          '<section class="card mb-20">' +
             '<h3>Abstract</h3>' +
-            '<p style="white-space:pre-wrap;margin-bottom:0">' + esc(r.abstract) + '</p>' +
+            '<p class="prewrap mb-0">' + esc(r.abstract) + '</p>' +
           '</section>' +
 
-          '<section class="card" style="margin-bottom:20px">' +
+          '<section class="card mb-20">' +
             '<h3>Record metadata</h3>' +
             '<dl class="dl">' +
               '<dt>Lead author</dt><dd>' + (owner
@@ -209,6 +214,7 @@
               '<dt>Co-authors</dt><dd>' + coAuthorHtml + '</dd>' +
               '<dt>Mission area</dt><dd>' + esc(r.missionArea) + '</dd>' +
               '<dt>Report type</dt><dd>' + esc(r.reportType) + '</dd>' +
+              (r.campaign ? '<dt>Campaign</dt><dd><a href="#/library?campaign=' + encodeURIComponent(r.campaign) + '">' + esc(r.campaign) + '</a></dd>' : '') +
               '<dt>Keywords</dt><dd>' + ((r.keywords || []).length
                   ? r.keywords.map(function (k) {
                       return '<a class="tag" href="#/library?q=' + encodeURIComponent(k) + '">' + esc(k) + '</a>';
@@ -220,7 +226,7 @@
               '<dt>Record identifier</dt><dd><code>' + esc(r.id) + '</code></dd>' +
             '</dl>' +
             (r.dataAvailability
-              ? '<hr><h4>Data availability</h4><p style="margin-bottom:0">' + esc(r.dataAvailability) + '</p>'
+              ? '<hr><h4>Data availability</h4><p class="mb-0">' + esc(r.dataAvailability) + '</p>'
               : '') +
           '</section>' +
 
@@ -228,7 +234,7 @@
         '</div>' +
 
         '<div>' +
-          '<section class="card" style="margin-bottom:20px"><h3>File</h3>' + ui.fileControl(r) +
+          '<section class="card mb-20"><h3>File</h3>' + ui.fileControl(r) +
             (supp.length
               ? '<hr><h4>Supplementary material</h4><ul class="linklist">' +
                 supp.map(function (s) {
@@ -238,9 +244,9 @@
               : '') +
           '</section>' +
           (isPrivileged ? workflowPanel(r, viewer) : '') +
-          (isPrivileged ? '<div style="margin-top:20px">' + historyPanel(r) + '</div>' : '') +
+          (isPrivileged ? '<div class="mt-20">' + historyPanel(r) + '</div>' : '') +
           (!isPrivileged
-            ? '<section class="card"><h3>Citation</h3><p class="meta" style="margin-bottom:0">' +
+            ? '<section class="card"><h3>Citation</h3><p class="meta mb-0">' +
               esc(store.authorLine(r)) + ' (' + esc(ui.year(r.submittedAt || r.createdAt)) + '). ' +
               esc(r.title) + '. EuroSpaceHub Lunar &amp; Mars Research Hub (internal), ' +
               'supervised by Prof. Bernard Foing.' +
@@ -251,7 +257,51 @@
     '</div>';
 
     ui.bindFileControl(ctx.el);
+    document.getElementById('citeBtn').addEventListener('click', function () { openCiteModal(r); });
     if (isPrivileged) wire(r, viewer, ctx);
+  }
+
+  /* Cite modal — pick a format, copy or download. The citation text is set as a
+     textarea .value (not innerHTML), so a hostile title cannot inject markup. */
+  function openCiteModal(r) {
+    ui.modal({
+      title: 'Cite this record',
+      cancelLabel: 'Close',
+      body:
+        '<div class="field"><label for="citeFmt">Format</label>' +
+          '<select id="citeFmt">' +
+            '<option value="apa">Plain (APA-style)</option>' +
+            '<option value="bibtex">BibTeX</option>' +
+            '<option value="ris">RIS</option>' +
+          '</select></div>' +
+        '<div class="field"><label class="sr-only" for="citeOut">Citation text</label>' +
+          '<textarea id="citeOut" rows="7" readonly></textarea></div>' +
+        '<div class="btn-row"><button class="btn btn--sm btn--primary" type="button" id="citeCopy">Copy</button>' +
+          '<button class="btn btn--sm" type="button" id="citeDownload">Download</button></div>'
+    });
+    var sel = document.getElementById('citeFmt');
+    var out = document.getElementById('citeOut');
+    function refresh() { out.value = ESH.exporter.citation(r, sel.value); }
+    sel.addEventListener('change', refresh);
+    refresh();
+
+    document.getElementById('citeCopy').addEventListener('click', function () {
+      out.select();
+      var done = false;
+      try {
+        if (global.navigator && navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(out.value); done = true;
+        }
+      } catch (e) {}
+      if (!done) { try { done = document.execCommand('copy'); } catch (e) {} }
+      ui.toast(done ? 'Citation copied.' : 'Select the text and copy manually.', done ? 'good' : 'err');
+    });
+    document.getElementById('citeDownload').addEventListener('click', function () {
+      var ext = sel.value === 'bibtex' ? 'bib' : sel.value === 'ris' ? 'ris' : 'txt';
+      var mime = sel.value === 'bibtex' ? 'application/x-bibtex'
+               : sel.value === 'ris' ? 'application/x-research-info-systems' : 'text/plain';
+      ESH.exporter.download('citation-' + r.id + '.' + ext, mime, out.value);
+    });
   }
 
   function wire(r, viewer, ctx) {

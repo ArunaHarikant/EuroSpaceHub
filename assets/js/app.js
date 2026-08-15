@@ -9,6 +9,40 @@
       router = ESH.router, V = ESH.views;
   var esc = ui.esc;
 
+  /* ---------------- theme ----------------
+     Dark is the default (the :root tokens). Light is opt-in via this toggle and
+     remembered in localStorage; there is no prefers-color-scheme auto-switch. */
+  var THEME_KEY = 'esh.theme';
+  var ICON_SUN = '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" ' +
+    'stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4.2"/>' +
+    '<path d="M12 2.5v2.2M12 19.3v2.2M4.2 4.2l1.6 1.6M18.2 18.2l1.6 1.6M2.5 12h2.2M19.3 12h2.2' +
+    'M4.2 19.8l1.6-1.6M18.2 5.8l1.6-1.6"/></svg>';
+  var ICON_MOON = '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" ' +
+    'stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M20 14.2A8 8 0 1 1 9.8 4 ' +
+    '6.4 6.4 0 0 0 20 14.2z"/></svg>';
+  var ICON_BELL = '<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" ' +
+    'stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+    '<path d="M18 8.5a6 6 0 1 0-12 0c0 6-2.2 7.5-2.2 7.5h16.4S18 14.5 18 8.5z"/>' +
+    '<path d="M13.7 20a2 2 0 0 1-3.4 0"/></svg>';
+
+  function currentTheme() {
+    try { return global.localStorage.getItem(THEME_KEY) === 'light' ? 'light' : 'dark'; }
+    catch (e) { return 'dark'; }
+  }
+  function applyTheme(theme) {
+    document.documentElement.setAttribute('data-theme', theme);
+    try { global.localStorage.setItem(THEME_KEY, theme); } catch (e) {}
+    var btn = document.getElementById('themeToggle');
+    if (btn) {
+      var toLight = theme === 'dark';
+      btn.innerHTML = toLight ? ICON_SUN : ICON_MOON;
+      var label = toLight ? 'Switch to light theme' : 'Switch to dark theme';
+      btn.setAttribute('aria-label', label);
+      btn.setAttribute('title', label);
+    }
+  }
+  function toggleTheme() { applyTheme(currentTheme() === 'dark' ? 'light' : 'dark'); }
+
   /* ---------------- routes ----------------
      The third argument is the guard requirement enforced in router.resolve()
      via auth.guard(). Guards are a convenience, not the security boundary —
@@ -22,6 +56,7 @@
   router.register('/researcher/:id',        V.profile,     'auth');
   router.register('/researcher/:id/edit',   V.profileEdit, 'auth');
   router.register('/me',                    V.me,          'auth');
+  router.register('/inbox',                 V.inbox,       'auth');
   router.register('/dashboard',             V.dashboard,   'supervisor');
   router.register('/signin',                V.signin);
   router.register('/register',              V.register);
@@ -66,29 +101,37 @@
   function renderSession() {
     var host = document.getElementById('sessionSlot');
     var u = auth.user();
+    var themeBtn = '<button class="btn btn--sm btn--ghost themetoggle" type="button" id="themeToggle"></button>';
     if (!u) {
-      host.innerHTML =
+      host.innerHTML = themeBtn +
         '<a class="btn btn--sm btn--ghost" href="#/signin">Sign in</a>' +
         '<a class="btn btn--sm btn--primary" href="#/register">Register</a>';
-      return;
+    } else {
+      var roleLabel = u.role === 'supervisor'
+        ? (u.id === store.SUPERVISOR_ID ? 'Supervisor' : 'Co-supervisor')
+        : 'Researcher';
+      var unread = auth.notificationsFor(u).filter(function (n) { return n.unread; }).length;
+      var bell = '<a class="notifbell" href="#/inbox" title="Notifications" aria-label="Notifications' +
+        (unread ? ' (' + unread + ' unread)' : '') + '">' + ICON_BELL +
+        (unread ? '<span class="notif-count" aria-hidden="true">' + (unread > 9 ? '9+' : unread) + '</span>' : '') +
+        '</a>';
+      host.innerHTML = bell + themeBtn +
+        '<span class="sessionchip">' +
+          ui.avatar(u, 'sm') +
+          '<span class="sessionchip__txt">' +
+            '<span class="sessionchip__name">' + esc(u.fullName) + '</span>' +
+            '<span class="sessionchip__role">' + esc(roleLabel) + '</span>' +
+          '</span>' +
+          '<button class="btn btn--sm btn--ghost" type="button" id="signOutBtn">Sign out</button>' +
+        '</span>';
+      document.getElementById('signOutBtn').addEventListener('click', function () {
+        auth.signOut();
+        ui.toast('Signed out. You are now a public visitor.', 'good');
+        router.navigate('#/');
+      });
     }
-    var roleLabel = u.role === 'supervisor'
-      ? (u.id === store.SUPERVISOR_ID ? 'Supervisor' : 'Co-supervisor')
-      : 'Researcher';
-    host.innerHTML =
-      '<span class="sessionchip">' +
-        ui.avatar(u, 'sm') +
-        '<span class="sessionchip__txt">' +
-          '<span class="sessionchip__name">' + esc(u.fullName) + '</span>' +
-          '<span class="sessionchip__role">' + esc(roleLabel) + '</span>' +
-        '</span>' +
-        '<button class="btn btn--sm btn--ghost" type="button" id="signOutBtn">Sign out</button>' +
-      '</span>';
-    document.getElementById('signOutBtn').addEventListener('click', function () {
-      auth.signOut();
-      ui.toast('Signed out. You are now a public visitor.', 'good');
-      router.navigate('#/');
-    });
+    document.getElementById('themeToggle').addEventListener('click', toggleTheme);
+    applyTheme(currentTheme());   /* sync the button icon/label with the active theme */
   }
 
   function renderChrome() {
@@ -153,11 +196,47 @@
           router.navigate('#/');
         }, true);
     });
+
+    /* Export the whole store as a JSON file the visitor can keep or move to
+       another browser (the store otherwise lives only in this one). */
+    document.getElementById('exportData').addEventListener('click', function () {
+      ESH.exporter.download('eurospacehub-data.json', 'application/json',
+        JSON.stringify(store.getState(), null, 2));
+    });
+
+    /* Import replaces everything, so it is gated behind a confirm and the shape
+       is validated in store.importState(). */
+    var importInput = document.getElementById('importData');
+    importInput.addEventListener('change', function () {
+      var file = importInput.files && importInput.files[0];
+      if (!file) return;
+      var reader = new global.FileReader();
+      reader.onload = function () {
+        var obj;
+        try { obj = JSON.parse(reader.result); }
+        catch (e) { ui.toast('That file is not valid JSON.', 'err'); importInput.value = ''; return; }
+        ui.confirmDialog('Import data',
+          'This replaces every account, report and comment in this browser with the contents of the file. ' +
+          'This cannot be undone. Consider exporting first.',
+          'Replace all data', function () {
+            if (store.importState(obj)) {
+              auth.signOut();
+              ui.toast('Data imported.', 'good');
+              router.navigate('#/');
+            } else {
+              ui.toast('That file is not a valid hub export.', 'err');
+            }
+          }, true);
+        importInput.value = '';
+      };
+      reader.readAsText(file);
+    });
   }
 
   /* ---------------- boot ---------------- */
 
   function boot() {
+    applyTheme(currentTheme());   /* set <html data-theme> before the first paint */
     wireGlobal();
 
     /* When the server refuses an optimistic write, the cache has already been
