@@ -640,6 +640,12 @@ mark { background: rgba(250,178,25,.28); color: inherit; border-radius: 3px; pad
   body { background: #fff; color: #000; }
 }
 
+/* Live build: the banner states a fact rather than a warning. */
+.demo-banner--live { background: #071a2b; border-bottom-color: rgba(85,152,231,.35); }
+.demo-banner--live .demo-banner__tag { background: var(--accent); color: #041020; }
+.demo-banner--live .demo-banner__text { color: #bcd4f2; }
+.demo-banner--live .demo-banner__text a { color: #8fc0ff; }
+.demo-banner--live .demo-banner__close { color: #bcd4f2; }
 /* ==========================================================================
    LIGHT THEME (opt-in)
    Dark is the default identity (the :root tokens above). Light is applied only

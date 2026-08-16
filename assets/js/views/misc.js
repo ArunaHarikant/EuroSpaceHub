@@ -116,9 +116,10 @@
         'often the better mechanism, and it is worth keeping even once email works.</p>' +
 
       '<h2>Placeholder content</h2>' +
-      '<p>Prof. Foing\'s biography, titles and publication figures are limited to the publicly documented ' +
-        'record. Every intern, report, abstract and comment in the seed data is an explicit placeholder — ' +
-        'no real people and no real unpublished research are represented.</p>' +
+      '<p>The landing page carries no biographical content: no titles, no publication figures, ' +
+        'no portrait. It states what the hub is and offers a way in, nothing more. Every intern, ' +
+        'report, abstract and comment in the demo seed data is an explicit placeholder — no real ' +
+        'people and no real unpublished research are represented.</p>' +
 
       '<div class="btn-row"><a class="btn btn--primary" href="#/">Return to the hub</a>' +
         '<a class="btn" href="#/signin">Try the role switcher</a></div>' +

@@ -256,6 +256,7 @@
       '</div>' +
     '</div>';
 
+    ui.bindFileControl(ctx.el);
     document.getElementById('citeBtn').addEventListener('click', function () { openCiteModal(r); });
     if (isPrivileged) wire(r, viewer, ctx);
   }

@@ -15,52 +15,21 @@
   var KEY = 'esh.foinghub.v1';
   var SESSION_KEY = 'esh.foinghub.session.v1';
 
-  /* ---------------- controlled vocabularies ---------------- */
+  /* ---------------- controlled vocabulary ----------------
+     Defined once in shared/policy.js, which the Node server requires from the
+     same file. Re-exported here so existing call sites (store.STATUSES, …)
+     keep working, but this module is no longer a second source of truth. */
 
-  var MISSION_AREAS = ['Lunar', 'Mars', 'Both', 'Other'];
+  var P = global.ESHPolicy;
+  if (!P) throw new Error('shared/policy.js must load before assets/js/store.js');
 
-  var REPORT_TYPES = [
-    'Research paper',
-    'Technical report',
-    'Poster',
-    'Presentation slides',
-    'Dataset + description',
-    'Analogue mission report'
-  ];
-
-  /* Workflow states. `terminal` states admit no further transitions.
-     `internEditable` marks the states in which the author may still change the
-     record: up to and including Submitted (the supervisor has not opened it
-     yet), and again when revisions are requested. Once it is Under Review the
-     supervisor is reading it, so it locks. */
-  var STATUSES = {
-    draft:      { key: 'draft',      label: 'Draft',              badge: 'draft',      order: 1, released: false, internEditable: true  },
-    submitted:  { key: 'submitted',  label: 'Submitted',          badge: 'submitted',  order: 2, released: false, internEditable: true  },
-    review:     { key: 'review',     label: 'Under Review',       badge: 'review',     order: 3, released: false, internEditable: false },
-    revisions:  { key: 'revisions',  label: 'Revisions Requested',badge: 'revisions',  order: 4, released: false, internEditable: true  },
-    approved:   { key: 'approved',   label: 'Approved',           badge: 'approved',   order: 5, released: true,  internEditable: false },
-    published:  { key: 'published',  label: 'Published',          badge: 'published',  order: 6, released: true,  internEditable: false },
-    rejected:   { key: 'rejected',   label: 'Rejected',           badge: 'rejected',   order: 7, released: false, internEditable: false, terminal: true },
-    withdrawn:  { key: 'withdrawn',  label: 'Withdrawn',          badge: 'withdrawn',  order: 8, released: false, internEditable: false, terminal: true }
-  };
-
-  var STATUS_ORDER = ['draft','submitted','review','revisions','approved','published','rejected','withdrawn'];
-
-  /* Legal transitions, by the role permitted to make them.
-     Enforced in auth.js#canTransition and in the UI. */
-  var TRANSITIONS = {
-    draft:     { intern: ['submitted', 'withdrawn'],            supervisor: [] },
-    submitted: { intern: ['withdrawn'],                          supervisor: ['review','revisions','approved','rejected'] },
-    review:    { intern: ['withdrawn'],                          supervisor: ['revisions','approved','rejected','submitted'] },
-    revisions: { intern: ['submitted','withdrawn'],              supervisor: ['review','rejected'] },
-    approved:  { intern: [],                                     supervisor: ['published','revisions','rejected'] },
-    published: { intern: [],                                     supervisor: ['approved'] },
-    rejected:  { intern: [],                                     supervisor: [] },
-    withdrawn: { intern: [],                                     supervisor: [] }
-  };
-
-  var STANDING = ['active', 'inactive', 'alumnus'];
-
+  var MISSION_AREAS  = P.MISSION_AREAS;
+  var REPORT_TYPES   = P.REPORT_TYPES;
+  var STATUSES       = P.STATUSES;
+  var STATUS_ORDER   = P.STATUS_ORDER;
+  var TRANSITIONS    = P.TRANSITIONS;
+  var STANDING       = P.STANDING;
+  var ACCEPTED_FILES = P.ACCEPTED_FILES;
   /* Suggested (not enforced) canonical institutions. Free text is still
      accepted; these drive the datalists and canonicalInstitution() so the same
      place isn't spelled three ways across the roster and filters. */
@@ -93,10 +62,6 @@
     'Lunar south-pole study',
     'Mars analogue programme'
   ];
-
-  var ACCEPTED_FILES = '.pdf,.docx,.pptx,application/pdf,' +
-    'application/vnd.openxmlformats-officedocument.wordprocessingml.document,' +
-    'application/vnd.openxmlformats-officedocument.presentationml.presentation';
 
   /* ---------------- ids, dates, misc ---------------- */
 
@@ -457,7 +422,15 @@
     return state;
   }
 
+  /* In API mode the server owns the data; this cache is a read model, so
+     persisting it to localStorage would only create a stale second copy. */
+  function apiMode() {
+    return !!(global.ESH && global.ESH.api && global.ESH.api.enabled());
+  }
+
   function save() {
+    if (apiMode()) return;
+
     try { global.localStorage.setItem(KEY, JSON.stringify(state)); }
     catch (e) {
       if (global.ESH && global.ESH.ui && global.ESH.ui.toast) {
@@ -512,7 +485,7 @@
   /* "Released" = Approved or Published: cleared by the supervisor for sharing
      with the rest of the group. Nothing in this hub is visible without a
      session, so this is NOT a public flag. */
-  function isReleased(r) { return !!(STATUSES[r.status] && STATUSES[r.status].released); }
+  var isReleased = P.isReleased;
   function releasedReports() { return getState().reports.filter(isReleased); }
 
   /* ---------------- controlled-vocabulary helpers ----------------
@@ -608,6 +581,7 @@
   function updateUser(id, patch) {
     var u = userById(id);
     if (!u) return null;
+    if (apiMode()) sync(global.ESH.api.users.update(id, patch), 'Saving profile');
     Object.keys(patch).forEach(function (k) { u[k] = patch[k]; });
     save();
     return u;
@@ -637,9 +611,12 @@
     return rec;
   }
 
-  function updateReport(id, patch) {
+  function updateReport(id, patch, opts) {
     var r = reportById(id);
     if (!r) return null;
+    if (apiMode() && !(opts && opts.localOnly)) {
+      sync(global.ESH.api.reports.update(id, patch), 'Saving changes');
+    }
     Object.keys(patch).forEach(function (k) { r[k] = patch[k]; });
     r.updatedAt = nowISO();
     save();
@@ -659,6 +636,7 @@
     if (!r) return null;
     var from = r.status;
     if (from === to) return r;
+    if (apiMode()) sync(global.ESH.api.reports.status(reportId, to, note), 'Changing status');
     r.status = to;
     r.updatedAt = nowISO();
     if (to === 'submitted') r.submittedAt = nowISO();
@@ -671,6 +649,7 @@
   function addComment(reportId, authorId, body, parentId, internal) {
     var r = reportById(reportId);
     if (!r) return null;
+    if (apiMode()) sync(global.ESH.api.reports.comment(reportId, body, parentId, internal), 'Posting comment');
     var rec = { id: uid('c'), authorId: authorId, at: nowISO(), body: body,
                 parentId: parentId || null, internal: !!internal };
     r.comments.push(rec);
@@ -758,6 +737,61 @@
     return temp;
   }
 
+  /* ==========================================================================
+     API MODE
+
+     With a backend present, this module stops being the source of truth and
+     becomes a read model: one /bootstrap call fills the cache with exactly
+     what the server says this actor may see, and the views keep reading it
+     synchronously, unchanged.
+
+     Writes are applied to the cache immediately and sent to the server in the
+     background. If the server refuses — which it will, if the browser's copy
+     of the policy ever disagrees with the real one — the optimistic change is
+     rolled back by re-hydrating from the server and the user is told. The
+     server's answer always wins.
+     ========================================================================== */
+
+  var onSyncError = null;   /* set by app.js so the store need not know about the UI */
+  function setSyncErrorHandler(fn) { onSyncError = fn; }
+
+  /** Replace the whole cache from the server. Returns a promise. */
+  function hydrate() {
+    if (!apiMode()) { load(); return Promise.resolve(getState()); }
+    return global.ESH.api.bootstrap().then(function (data) {
+      state = {
+        version: 1,
+        seededAt: nowISO(),
+        users: (data.users || []).slice(),
+        reports: (data.reports || []).slice()
+      };
+      return state;
+    });
+  }
+
+  /* Fire a server call for an optimistic local change. On failure, re-sync
+     and hand the error to the UI. */
+  function sync(promise, what) {
+    if (!promise || !promise.then) return promise;
+    return promise.catch(function (err) {
+      return hydrate().then(function () {
+        if (onSyncError) onSyncError(err, what);
+        else console.error('[store] ' + what + ' failed:', err);
+        throw err;
+      });
+    });
+  }
+
+  /* Async, server-first creation. Used by the submission form, which must
+     have a real report id before it can upload a file against it. */
+  function createReport(patch) {
+    if (!apiMode()) return Promise.resolve(addReport(patch));
+    return global.ESH.api.reports.create(patch).then(function (d) {
+      getState().reports.push(d.report);
+      return d.report;
+    });
+  }
+
   /* ---------------- exports ---------------- */
 
   global.ESH = global.ESH || {};
@@ -771,7 +805,10 @@
     suggestedKeywords: suggestedKeywords, canonicalCampaign: canonicalCampaign,
     campaignsInUse: campaignsInUse,
 
-    load: load, save: save, reset: reset, getState: getState, importState: importState, uid: uid, nowISO: nowISO,
+    load: load, save: save, reset: reset, getState: getState, uid: uid, nowISO: nowISO,
+    apiMode: apiMode, hydrate: hydrate, createReport: createReport,
+    setSyncErrorHandler: setSyncErrorHandler,
+    importState: importState,
 
     users: users, interns: interns, supervisors: supervisors,
     userById: userById, userByEmail: userByEmail,

@@ -24,14 +24,12 @@
      This build ships a STUBBED, client-side authentication and
      authorisation layer. See README.md § Access control.
      ============================================================ -->
-<div class="demo-banner" id="demoBanner" role="region" aria-label="Demonstration mode notice">
+<div class="demo-banner" id="demoBanner" role="region" aria-label="Build mode notice" hidden>
   <div class="wrap demo-banner__inner">
-    <span class="demo-banner__tag">DEMO MODE</span>
-    <p class="demo-banner__text">
-      Authentication and access control in this build are <strong>simulated in the browser</strong>
-      (no server, no real security). All data is stored in this browser's <code>localStorage</code>.
-      <a href="#/about-demo">How the access model works &rsaquo;</a>
-    </p>
+    <span class="demo-banner__tag" id="demoBannerTag">DEMO MODE</span>
+    <p class="demo-banner__text" id="demoBannerText"><!-- set by app.js: the wording
+      depends on whether a real backend is answering, and must never claim
+      "no server" when one is running. --></p>
     <button class="demo-banner__close" type="button" id="demoBannerClose" aria-label="Dismiss notice">&times;</button>
   </div>
 </div>
@@ -121,6 +119,12 @@
 <div id="modalRoot"></div>
 
 <!-- Classic scripts (no ES modules) so the build also runs from file:// -->
+<!-- config.js is served by the backend and sets window.ESH_CONFIG.apiBase.
+     Opened from disk it 404s harmlessly and the hub stays in demo mode. -->
+<script src="config.js"></script>
+<!-- The authorisation gate, shared verbatim with the Node server. -->
+<script src="shared/policy.js"></script>
+<script src="assets/js/api.js"></script>
 <script src="assets/js/store.js"></script>
 <script src="assets/js/auth.js"></script>
 <script src="assets/js/ui.js"></script>

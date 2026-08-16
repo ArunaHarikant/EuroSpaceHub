@@ -342,13 +342,31 @@
     }).join('');
   }
 
-  /* Escape-safe download/view control for a report file. */
+  /* Download control for a report file.
+
+     With a backend, the button carries no URL: clicking it asks the server for
+     a short-lived presigned GET, which the server only issues after checking
+     can('report:read') against its own session and its own report row. There
+     is deliberately no B2 key in this markup — a key is not a capability, and
+     one sitting in page source is a key in someone's browser history.
+
+     Wire the click with bindFileControl() after inserting this. */
   function fileControl(r) {
     if (!r.file) {
       return '<p class="meta">No file attached to this record.</p>';
     }
+    var label = esc(r.file.name) +
+      (r.file.size ? ' <span class="meta">(' + esc(fmtBytes(r.file.size)) + ')</span>' : '');
+
+    if (store.apiMode && store.apiMode()) {
+      return '<p><button class="btn btn--primary" type="button" data-download="' + esc(r.id) + '">' +
+               'Download file</button></p>' +
+             '<p class="meta">' + label + '</p>' +
+             '<p class="field__hint" data-download-status="' + esc(r.id) + '" hidden></p>';
+    }
+
+    /* Demo mode: the binary only ever existed in this tab. */
     var handle = store.fileHandle(r.file);
-    var label = esc(r.file.name) + (r.file.size ? ' <span class="meta">(' + esc(fmtBytes(r.file.size)) + ')</span>' : '');
     if (handle && handle.available) {
       return '<p><a class="btn btn--primary" href="' + esc(handle.url) + '" download="' + esc(r.file.name) + '">Download file</a></p>' +
              '<p class="meta">' + label + '</p>';
@@ -356,6 +374,33 @@
     return '<p><span class="btn" aria-disabled="true" title="Not available in this demo build">Download file</span></p>' +
            '<p class="meta">' + label + ' — <em>the binary is not stored in this demonstration build; ' +
            'only file metadata is persisted. See the access-control notes.</em></p>';
+  }
+
+  /** Attach the gated-download handler to any file controls inside `root`. */
+  function bindFileControl(root) {
+    if (!store.apiMode || !store.apiMode()) return;
+    (root || document).querySelectorAll('[data-download]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var id = btn.getAttribute('data-download');
+        var status = (root || document).querySelector('[data-download-status="' + id + '"]');
+        btn.disabled = true;
+        if (status) { status.hidden = false; status.textContent = 'Preparing a secure link…'; }
+
+        global.ESH.api.downloadUrl(id).then(function (d) {
+          if (status) {
+            status.textContent = 'Link issued — it expires in ' + Math.round(d.expiresIn / 60) + ' minutes.';
+          }
+          /* Navigate rather than window.open: no popup blocker, and the
+             Content-Disposition the server signed makes it a download. */
+          global.location.href = d.url;
+        }).catch(function (err) {
+          if (status) status.textContent = '';
+          toast(err.message || 'Could not prepare the download.', 'err');
+        }).then(function () {
+          btn.disabled = false;
+        });
+      });
+    });
   }
 
   global.ESH.ui = {
@@ -369,7 +414,7 @@
     toast: toast, modal: modal, closeModal: closeModal, confirmDialog: confirmDialog,
     fieldError: fieldError, clearFieldError: clearFieldError, clearAllErrors: clearAllErrors,
     focusFirstError: focusFirstError, isEmail: isEmail, selectOptions: selectOptions,
-    fileControl: fileControl
+    fileControl: fileControl, bindFileControl: bindFileControl
   };
 
 })(window);
