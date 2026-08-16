@@ -131,11 +131,16 @@ section('Signed-out visitor');
 ESH.auth.signOut();
 goto('#/');
 ok('landing renders Foing hub', /Lunar & Mars Research Hub/.test(text()));
-ok('titles: ILEWG executive director', /Executive Director/.test(text()) && /ILEWG/.test(text()));
-ok('titles: SMART-1', /SMART-1/.test(text()));
-ok('titles: Mars Express HRSC', /High Resolution Stereo Camera/.test(text()));
-ok('bio: CNRS 1986 + ESA 1993', /CNRS/.test(text()) && /1986/.test(text()) && /1993/.test(text()));
-ok('bio figures present', /400/.test(text()) && /50\+/.test(text()));
+/* The landing page is a gateway now: no biography, no titles, no figures. */
+ok('no role titles on the landing page',
+   !/Executive Director/.test(text()) && !/Principal Project Scientist/.test(text()) &&
+   !/Co-Investigator/.test(text()) && !/Research Professor/.test(text()));
+ok('no biography section', !/Biography/.test(text()) && !/CNRS/.test(text()));
+ok('no publication figures',
+   !/400/.test(text()) && !/refereed/.test(text()) && !/Record at a glance/.test(text()));
+ok('no research-focus tags', !/Research focus/.test(text()) && !/Astrobiology/.test(text()));
+ok('no portrait placeholder', !/Portrait placeholder/.test(text()));
+ok('the hub is still named', /Lunar & Mars Research Hub/.test(text()));
 ok('landing says the hub is private', /This research hub is private/.test(text()));
 
 /* --- nothing about the work leaks onto the only public page --- */

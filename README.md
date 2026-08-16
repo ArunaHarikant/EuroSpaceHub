@@ -291,14 +291,11 @@ node tests/smoke.mjs                # in another
 
 ## Content provenance
 
-Prof. Foing's titles, biography and publication figures are limited to the publicly documented
-record supplied in the project brief — PhD in Astrophysics and Space Techniques; CNRS since 1986;
-ESA since 1993; Executive Director of ILEWG; Senior Research Coordinator in ESA's Research and
-Scientific Support Department; Principal Project Scientist for SMART-1; co-investigator on Mars
-Express HRSC; research professor at VU Amsterdam and Florida Institute of Technology; 400+ articles
-including approximately 160 refereed papers; 16 books edited; 50+ conferences organised. Nothing is
-inferred beyond that, and there are no quotations.
+The landing page carries **no biographical content** about Prof. Foing — no titles, no
+publication figures, no portrait. It names the hub, states its purpose in a sentence, and offers
+sign-in. Earlier versions carried a full profile built from the publicly documented record; that
+was removed once the hub became a closed working tool rather than a public showcase.
 
-The portrait is a labelled placeholder. Every intern, report, abstract, comment and internal note in
+Every intern, report, abstract, comment and internal note in
 the seed data is an explicit placeholder ("Intern Name A", "Sample Lunar Regolith Report") — no real
 people and no real unpublished research are represented.
