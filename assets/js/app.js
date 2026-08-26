@@ -207,6 +207,14 @@
     /* Import replaces everything, so it is gated behind a confirm and the shape
        is validated in store.importState(). */
     var importInput = document.getElementById('importData');
+    /* Import replaces the whole store, which only means something when the
+       store IS the data. With a backend it is a cache the server refills, so
+       the control is withdrawn rather than left to fail quietly. Export stays:
+       a dump of what you can see is still a useful backup. */
+    if (store.apiMode()) {
+      var importLabel = document.querySelector('label[for="importData"]');
+      if (importLabel) importLabel.hidden = true;
+    }
     importInput.addEventListener('change', function () {
       var file = importInput.files && importInput.files[0];
       if (!file) return;
@@ -224,7 +232,9 @@
               ui.toast('Data imported.', 'good');
               router.navigate('#/');
             } else {
-              ui.toast('That file is not a valid hub export.', 'err');
+              ui.toast(store.apiMode()
+                ? 'Import is unavailable when the hub is backed by a server.'
+                : 'That file is not a valid hub export.', 'err');
             }
           }, true);
         importInput.value = '';

@@ -83,6 +83,13 @@
     ACCEPTED_MIME.pdf + ',' + ACCEPTED_MIME.docx + ',' + ACCEPTED_MIME.pptx;
   var MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
 
+  /* Minimum length for a password a person chooses. Lives here so the form's
+     validation and the server's rejection cannot drift apart — a client stricter
+     than the server rejects passwords the server would accept, and a client
+     looser than the server produces a confusing round trip. Generated passwords
+     (seed.js, supervisor-issued, account creation) are longer than this. */
+  var MIN_PASSWORD_LENGTH = 10;
+
   /* What one signed-in member may see of another. Email, research-period
      dates and internal notes are absent by construction. */
   var SHARED_USER_FIELDS = ['id','fullName','institution','programme','researchTopic',
@@ -315,6 +322,7 @@
     ACCEPTED_MIME: ACCEPTED_MIME,
     ACCEPTED_FILES: ACCEPTED_FILES,
     MAX_UPLOAD_BYTES: MAX_UPLOAD_BYTES,
+    MIN_PASSWORD_LENGTH: MIN_PASSWORD_LENGTH,
     SHARED_USER_FIELDS: SHARED_USER_FIELDS,
 
     isReleased: isReleased,

@@ -439,7 +439,13 @@
     }
   }
 
+  /* Restores the seeded placeholder content. Demo-mode only: against a backend
+     this would replace the cache with fake reports until the next hydrate, and
+     the footer button that calls it is hidden. Guarded here as well so the
+     hidden control is not the only thing standing between a live hub and six
+     placeholder records. */
   function reset() {
+    if (apiMode()) return getState();
     state = freshState();
     save();
     try { global.localStorage.removeItem(SESSION_KEY); } catch (e) {}
@@ -450,7 +456,13 @@
   /* Replace all data with a previously exported object. Validates the shape
      before committing so a malformed file cannot corrupt the store. Returns
      true on success. */
+  /* Wholesale replacement of the local store. In API mode the store is a read
+     model, not the source of truth: overwriting it would show imported data
+     until the next /bootstrap silently replaced it again, and nothing would
+     ever reach the server. Refused rather than half-applied — the UI hides the
+     control too, but the guard is here so it cannot be reached another way. */
   function importState(obj) {
+    if (apiMode()) return false;
     if (!obj || obj.version !== 1 || !Array.isArray(obj.users) || !Array.isArray(obj.reports)) return false;
     state = { version: 1, seededAt: obj.seededAt || nowISO(), users: obj.users, reports: obj.reports };
     save();
@@ -632,6 +644,49 @@
     return r;
   }
 
+  /* Featuring has its OWN endpoint and is NOT a patchable report field: the
+     server's PATCH whitelist deliberately excludes `featured`, because pinning
+     a record is a supervisor act gated on can('report:feature'), not an edit.
+     Routing it through updateReport() therefore looked like it worked and was
+     silently discarded server-side. */
+  function setFeatured(reportId, on, byUserId) {
+    var r = reportById(reportId);
+    if (!r) return null;
+    if (apiMode()) {
+      /* The server writes its own history entry for this action, so adding one
+         locally too would show the change twice until the next hydrate. */
+      sync(global.ESH.api.reports.feature(reportId, on), 'Updating featured');
+    } else {
+      r.history.push({ at: nowISO(), by: byUserId || '', from: r.status, to: r.status,
+                       note: on ? 'Featured in the report library.' : 'Removed from featured.' });
+    }
+    r.featured = !!on;
+    r.updatedAt = nowISO();
+    save();
+    return r;
+  }
+
+  /* Hard delete. In API mode the server also removes the B2 object, which the
+     browser cannot do — dropping the row from the local cache alone left the
+     record on the server (it returned on the next reload) and the file orphaned
+     in the bucket. Async so callers can navigate only once it is really gone. */
+  function deleteReport(reportId) {
+    var r = reportById(reportId);
+    if (!r) return Promise.resolve(false);
+
+    function dropLocal() {
+      var st = getState();
+      st.reports = st.reports.filter(function (x) { return x.id !== reportId; });
+      save();
+      return true;
+    }
+
+    if (!apiMode()) return Promise.resolve(dropLocal());
+    /* Server first: a refusal must not leave the record missing from the view
+       while it still exists. */
+    return global.ESH.api.reports.remove(reportId).then(dropLocal);
+  }
+
   function logHistory(reportId, byUserId, from, to, note) {
     var r = reportById(reportId);
     if (!r) return null;
@@ -698,7 +753,11 @@
 
   /** Issue a reset token. Returns null when no account matches — callers must
       still show the same neutral message either way (no account enumeration). */
+  /* Demo-mode only. The token is surfaced on screen because there is no mail
+     service; doing that against real accounts is account takeover, so API mode
+     routes users to the supervisor instead and this refuses outright. */
   function requestPasswordReset(email) {
+    if (apiMode()) return { ok: false, error: 'Self-service reset is unavailable on this hub.' };
     var u = userByEmail(email);
     if (!u) return null;
     u.resetToken = randomToken();
@@ -852,6 +911,7 @@
     releasedReports: releasedReports, isReleased: isReleased, authorLine: authorLine,
 
     addUser: addUser, createUser: createUser, updateUser: updateUser, markNotificationsSeen: markNotificationsSeen,
+    setFeatured: setFeatured, deleteReport: deleteReport,
     addReport: addReport, updateReport: updateReport,
     setStatus: setStatus, logHistory: logHistory, addComment: addComment,
 

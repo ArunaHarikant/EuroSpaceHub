@@ -364,9 +364,9 @@
     if (feat) {
       feat.addEventListener('change', function () {
         if (!auth.can('report:feature', r, viewer)) { feat.checked = r.featured; return; }
-        store.updateReport(r.id, { featured: feat.checked });
-        store.logHistory(r.id, viewer.id, r.status, r.status,
-          feat.checked ? 'Marked as featured in the report library.' : 'Removed from featured.');
+        /* setFeatured() writes the history entry itself — the server does it in
+           API mode, the store does it in demo mode. */
+        store.setFeatured(r.id, feat.checked, viewer.id);
         ui.toast(feat.checked ? 'Record featured in the library.' : 'Record removed from featured.', 'good');
         reRender();
       });
@@ -379,11 +379,15 @@
         ui.confirmDialog('Delete record',
           'This permanently removes the record, its history and all comments. This cannot be undone.',
           'Delete permanently', function () {
-            var s = store.getState();
-            s.reports = s.reports.filter(function (x) { return x.id !== r.id; });
-            store.save();
-            ui.toast('Record deleted.', 'good');
-            router.navigate('#/dashboard');
+            /* Server first in API mode — it owns the row and is the only thing
+               that can remove the file from B2. Navigating before it confirms
+               would report a deletion that had not happened. */
+            store.deleteReport(r.id).then(function () {
+              ui.toast('Record deleted.', 'good');
+              router.navigate('#/dashboard');
+            })['catch'](function (err) {
+              ui.toast(err.message || 'The record could not be deleted.', 'err');
+            });
           }, true);
       });
     }

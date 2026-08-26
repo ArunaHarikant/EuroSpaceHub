@@ -229,10 +229,13 @@ behind it worth protecting.
 
 ### Passwords
 
-**API mode.** scrypt via `node:crypto`, salted per account, and changing a password deletes every
-existing session for that user. There is **no self-service reset**: a reset link has to be emailed to
-prove control of the mailbox, and no mail service is configured. `#/reset` says so and points at the
-supervisor.
+**API mode.** scrypt via `node:crypto`, salted per account. Everyone can **change their own
+password** from their profile-edit page, which requires the current one; doing so deletes every
+other session for that account and re-issues only the calling tab's. The minimum length lives in
+`shared/policy.js`, so the form and the server cannot drift apart.
+
+There is **no self-service reset**: a reset link has to be emailed to prove control of the mailbox,
+and no mail service is configured. `#/reset` says so and points at the supervisor.
 
 **Supervisor-issued replacement.** From any researcher profile, the supervisor issues a temporary
 password, shown once, which replaces the account password immediately and drops that user's
@@ -260,6 +263,28 @@ saves a file's **name, size and type** and keeps the binary in an in-memory blob
 Downloads work until you reload, after which the record shows the metadata and states plainly that
 the file is unavailable. Silently dropping the upload, or pretending it had been stored, would have
 been worse. Profile photographs are referenced by URL rather than uploaded.
+
+---
+
+## What each mode does not offer
+
+The two builds are not the same app with the security switched off — some controls only make sense
+in one of them, and are **withdrawn** in the other rather than left to fail quietly. Anything that
+writes has to reach the right authority or not be offered at all.
+
+| Control | Demo | API | Why |
+|---|---|---|---|
+| Demo role switcher | yes | **no** | It is an authentication bypass. `auth.assume()` refuses regardless. |
+| Self-service registration | yes | **no** | An open form on a closed hub admits anyone with the URL. Supervisor issues accounts. |
+| Self-service password reset | yes | **no** | It prints its own token, having no mail service. Supervisor issues replacements. |
+| Change your own password | no | **yes** | Meaningless where passwords are plaintext in `localStorage`. |
+| Create an account (dashboard) | no | **yes** | Demo mode registers at `#/register` instead. |
+| Reset demonstration data | yes | **no** | There is no demo data to reset. |
+| Import data (JSON) | yes | **no** | The store is a server-filled cache; an import would be overwritten on the next load. |
+| Export data (JSON) | yes | yes | A dump of what you can see is a useful backup either way. |
+
+Each is gated on `store.apiMode()` in the view **and** guarded in `store.js`, so a hidden control is
+never the only thing standing between a live hub and a demo-only code path.
 
 ---
 
@@ -364,7 +389,7 @@ node tests/smoke.mjs                # self-hosts its own server; nothing else ne
 **`server/test/api.test.js`** — matters more, because it asserts what an **attacker** cannot do,
 against the real HTTP API with real cookies. Nothing in it loads the frontend; the browser's opinion
 is irrelevant. It also covers field round-trips, since a dropped column produces no error anywhere —
-the request succeeds and the value is simply gone on the next read. **32 tests.** B2 is not
+the request succeeds and the value is simply gone on the next read. **38 tests.** B2 is not
 contacted: the presign path is covered by asserting requests are refused *before* any signing
 happens, and the tests needing real Backblaze credentials skip unless `B2_KEY_ID` is set.
 

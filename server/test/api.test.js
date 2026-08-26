@@ -498,3 +498,110 @@ test('account creation validates the address and refuses duplicates', async () =
   const dupe = await call('POST', '/api/users', { cookie, body: { fullName: 'Clash', email: 'a@test.local' } });
   assert.equal(dupe.status, 409);
 });
+
+/* ================= featuring and deletion =================
+   Both have dedicated endpoints. The browser previously routed featuring
+   through PATCH /reports/:id, whose whitelist excludes `featured` — so the
+   toggle appeared to work and was discarded. These assert the real routes. */
+
+test('featured is not settable through the report PATCH whitelist', async () => {
+  const { cookie } = await login('sup@test.local', 'u_sup');
+  const r = seedReport('u_a', 'published', 'r_feat_patch');
+
+  const res = await call('PATCH', '/api/reports/' + r.id, { cookie, body: { featured: true } });
+  assert.equal(res.status, 200, 'the request itself is fine — it just must not set featured');
+  assert.equal(db.reportById(r.id).featured, false,
+    'featuring must go through its own gated route, not ride along in an edit');
+});
+
+test('the featured route pins and unpins a released record', async () => {
+  const { cookie } = await login('sup@test.local', 'u_sup');
+  const r = seedReport('u_a', 'published', 'r_feat_route');
+
+  const on = await call('POST', '/api/reports/' + r.id + '/featured', { cookie, body: { featured: true } });
+  assert.equal(on.status, 200);
+  assert.equal((await on.json()).report.featured, true);
+  assert.equal(db.reportById(r.id).featured, true, 'it must actually persist');
+
+  const off = await call('POST', '/api/reports/' + r.id + '/featured', { cookie, body: { featured: false } });
+  assert.equal((await off.json()).report.featured, false);
+});
+
+test('an unreleased record cannot be featured, and an intern cannot feature at all', async () => {
+  const sup = await login('sup@test.local', 'u_sup');
+  const a = await login('a@test.local', 'u_a');
+
+  const draft = seedReport('u_a', 'draft', 'r_feat_draft');
+  const refused = await call('POST', '/api/reports/' + draft.id + '/featured',
+    { cookie: sup.cookie, body: { featured: true } });
+  assert.equal(refused.status, 403, 'only released records can be pinned');
+  assert.equal(db.reportById(draft.id).featured, false);
+
+  const released = seedReport('u_a', 'published', 'r_feat_intern');
+  const byIntern = await call('POST', '/api/reports/' + released.id + '/featured',
+    { cookie: a.cookie, body: { featured: true } });
+  assert.equal(byIntern.status, 403, 'featuring is a supervisory act even on your own record');
+  assert.equal(db.reportById(released.id).featured, false);
+});
+
+test('delete is supervisor-only and actually removes the row', async () => {
+  const sup = await login('sup@test.local', 'u_sup');
+  const a = await login('a@test.local', 'u_a');
+  const r = seedReport('u_a', 'draft', 'r_del');
+
+  const byOwner = await call('DELETE', '/api/reports/' + r.id, { cookie: a.cookie });
+  assert.equal(byOwner.status, 403, 'a hard delete is not the author\'s to make');
+  assert.ok(db.reportById(r.id), 'a refused delete must leave the record intact');
+
+  const bySup = await call('DELETE', '/api/reports/' + r.id, { cookie: sup.cookie });
+  assert.equal(bySup.status, 200);
+  assert.equal(db.reportById(r.id), null, 'the row must be gone, not just hidden');
+
+  const again = await call('DELETE', '/api/reports/' + r.id, { cookie: sup.cookie });
+  assert.equal(again.status, 404, 'deleting it twice is a 404, not a crash');
+});
+
+/* ================= password change ================= */
+
+test('the password minimum comes from the shared policy, not a local constant', async () => {
+  const { cookie } = await login('sup@test.local', 'u_sup');
+  assert.equal(typeof policy.MIN_PASSWORD_LENGTH, 'number');
+
+  const tooShort = 'x'.repeat(policy.MIN_PASSWORD_LENGTH - 1);
+  const res = await call('POST', '/api/auth/password', {
+    cookie, body: { currentPassword: 'pw-u_sup', newPassword: tooShort }
+  });
+  assert.equal(res.status, 400);
+  assert.match((await res.json()).error, new RegExp(String(policy.MIN_PASSWORD_LENGTH)),
+    'the message must quote the shared value so the form and the server agree');
+});
+
+test('changing a password requires the current one', async () => {
+  /* A dedicated account: a successful change drops this user's sessions. */
+  const { hash, salt } = session.hashPassword('pw-u_pwtest');
+  db.insertUser({ id: 'u_pwtest', role: 'intern', fullName: 'PW Test', email: 'pw@test.local',
+                  passwordHash: hash, passwordSalt: salt, standing: 'active', createdAt: db.nowISO() });
+  const { cookie } = await login('pw@test.local', 'u_pwtest');
+
+  const wrong = await call('POST', '/api/auth/password', {
+    cookie, body: { currentPassword: 'not-it', newPassword: 'a-long-enough-one' }
+  });
+  assert.equal(wrong.status, 403);
+
+  const right = await call('POST', '/api/auth/password', {
+    cookie, body: { currentPassword: 'pw-u_pwtest', newPassword: 'a-long-enough-one' }
+  });
+  assert.equal(right.status, 200);
+
+  /* The new password works and the old one does not. */
+  const withNew = await fetch(base + '/api/auth/login', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: 'pw@test.local', password: 'a-long-enough-one' })
+  });
+  assert.equal(withNew.status, 200);
+  const withOld = await fetch(base + '/api/auth/login', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: 'pw@test.local', password: 'pw-u_pwtest' })
+  });
+  assert.equal(withOld.status, 401);
+});
