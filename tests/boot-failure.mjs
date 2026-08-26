@@ -1,12 +1,14 @@
-/* API-mode boot tests.
+/* Boot-failure tests.
  *
- * The main suite (smoke.mjs) exercises DEMO mode: it serves the repo's own
- * config.js, which leaves `apiBase` null, so `api.js` stays inert and nothing
- * in it is ever executed. This file covers the other build's boot path by
- * serving a config that turns API mode ON and controlling what /api answers.
+ * The main suite (smoke.mjs) drives the app against a REAL server that works.
+ * This file covers the boot path when the server does NOT — the case with no
+ * happy answer available, where the temptation is to render something.
+ *
+ * It serves the static files itself and controls what /api answers, so it needs
+ * no database and no express.
  *
  *   npm install jsdom              # same single test-only dependency
- *   node tests/api-mode.mjs
+ *   node tests/boot-failure.mjs
  *
  * NOTE: jsdom ships no `fetch`, and the app requires one. Without the polyfill
  * in beforeParse below, every API call throws ReferenceError and the suite
@@ -35,7 +37,7 @@ function startServer(apiHandler) {
     const url = decodeURIComponent(req.url.split('?')[0]);
 
     /* Stand in for the route the real server registers ahead of its static
-       handler. This is the single switch that puts the hub in API mode. */
+       handler. */
     if (url === '/config.js') {
       res.writeHead(200, { 'Content-Type': 'text/javascript' });
       return res.end('window.ESH_CONFIG = { apiBase: "/api" };');
@@ -71,16 +73,14 @@ async function load(base) {
 }
 
 /* ==========================================================================
-   An unreachable API must not be rendered as an empty hub.
+   An unreachable server must not be rendered as an empty hub.
 
    `api.bootstrap()` used to swallow the failure and resolve with empty arrays,
    so an outage was indistinguishable from a signed-out visitor looking at a
-   hub that is empty by design. The boot handler's fallback then called
-   store.load(), which SEEDS PLACEHOLDER CONTENT when localStorage is empty —
-   six invented reports and seven invented accounts, under a banner reading
-   "access is enforced on the server".
+   hub that is empty by design — and the boot handler then fell back to a
+   client-side seed. Both of those are gone; this is what holds them gone.
    ========================================================================== */
-console.log('\n— API mode: the server is unreachable');
+console.log('\n— The server is unreachable');
 {
   const { server, base } = await startServer((req, res) => {
     res.writeHead(503, { 'Content-Type': 'application/json' });
@@ -114,12 +114,12 @@ console.log('\n— API mode: the server is unreachable');
 }
 
 /* ==========================================================================
-   A healthy API with an anonymous visitor is a DIFFERENT state: the hub loads
+   A healthy server with an anonymous visitor is a DIFFERENT state: the hub loads
    normally and shows the landing page, with no reports because none are
    visible to a signed-out caller. This is the case the outage must not be
    confused with, so it is asserted alongside.
    ========================================================================== */
-console.log('\n— API mode: the server is healthy, the visitor is signed out');
+console.log('\n— The server is healthy and the visitor is signed out');
 {
   const { server, base } = await startServer((req, res) => {
     const url = req.url.split('?')[0];
@@ -136,10 +136,10 @@ console.log('\n— API mode: the server is healthy, the visitor is signed out');
 
   ok('the landing page renders', !!d.querySelector('h1'));
   ok('it does NOT claim the server is unreachable', !/cannot reach its server/i.test(body));
-  ok('the banner reports the live build',
-    (d.getElementById('demoBannerTag') || {}).textContent === 'PRIVATE');
-  ok('no placeholder content leaks into API mode', !/Intern Name [A-E]/.test(body));
-  ok('the demo role switcher is absent', !d.querySelector('[data-assume]'));
+  ok('the banner reports a private hub',
+    (d.getElementById('statusBannerTag') || {}).textContent === 'PRIVATE');
+  ok('no placeholder content appears', !/Intern Name [A-E]/.test(body));
+  ok('there is no demo role switcher', !d.querySelector('[data-assume]'));
 
   dom.window.close();
   server.close();

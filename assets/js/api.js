@@ -1,9 +1,9 @@
 /* ==========================================================================
-   api.js — the browser's client for the real backend.
+   api.js — the browser's client for the server.
 
-   Enabled only when window.ESH_CONFIG.apiBase is set, which the server serves
-   from /config.js. Opened from disk with no server, the file is inert and the
-   hub falls back to its localStorage demo mode.
+   The server is the only source of data, sessions and authorisation. There is
+   no offline mode: if this module cannot reach the API, the hub says so rather
+   than showing something it made up.
 
    The session is an httpOnly cookie: nothing here reads or writes it, and
    `credentials: 'same-origin'` is what carries it. `session()` returns the
@@ -17,11 +17,10 @@
   'use strict';
 
   var CFG = global.ESH_CONFIG || {};
-  var BASE = CFG.apiBase || null;
+  var BASE = CFG.apiBase || '/api';
 
   var sessionUser = null;      /* filled by bootstrap() */
 
-  function enabled() { return !!BASE; }
   function session() { return sessionUser; }
 
   /* ---------------- transport ---------------- */
@@ -198,7 +197,7 @@
 
   global.ESH = global.ESH || {};
   global.ESH.api = {
-    enabled: enabled, session: session, bootstrap: bootstrap,
+    session: session, bootstrap: bootstrap,
     login: login, logout: logout, changePassword: changePassword,
     issueTemporaryPassword: issueTemporaryPassword,
     reports: reports, users: users,

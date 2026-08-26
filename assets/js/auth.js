@@ -30,29 +30,18 @@
 
   if (!P) throw new Error('shared/policy.js must load before assets/js/auth.js');
 
-  function apiMode() { return !!(global.ESH.api && global.ESH.api.enabled()); }
+  /* ---------------- session ----------------
 
-  /* ---------------- session ---------------- */
+     The session is an httpOnly cookie the browser cannot read. Everything here
+     is a local note of who the SERVER said we are at the last round trip — an
+     answer, not an assertion, and never a credential. Clearing `current` signs
+     nobody out on its own; only the server can do that. */
 
   var current = null;   /* null === unauthenticated visitor */
 
-  function restore() {
-    if (apiMode()) { current = global.ESH.api.session(); return current; }
-    var id = null;
-    try { id = global.localStorage.getItem(store.SESSION_KEY); } catch (e) {}
-    current = id ? store.userById(id) : null;
-    return current;
-  }
+  function restore() { current = global.ESH.api.session(); return current; }
 
-  function persist() {
-    if (apiMode()) return;                 /* the cookie is the session */
-    try {
-      if (current) global.localStorage.setItem(store.SESSION_KEY, current.id);
-      else global.localStorage.removeItem(store.SESSION_KEY);
-    } catch (e) {}
-  }
-
-  function setCurrent(u) { current = u || null; persist(); return current; }
+  function setCurrent(u) { current = u || null; return current; }
 
   function user() { return current; }
   function role() { return current ? current.role : 'public'; }
@@ -60,53 +49,25 @@
   function isIntern() { return role() === 'intern'; }
   function isAuthenticated() { return !!current; }
 
-  /**
-   * signIn(email, password)
-   *   API mode  — async, returns a Promise<{ok, user|error}>.
-   *   Demo mode — synchronous, returns {ok, user|error} as it always did.
-   * Callers that must work in both await the result; awaiting a plain object
-   * is harmless, so `var res = await auth.signIn(...)` is correct either way.
-   */
+  /** Resolves with {ok:true, user} or {ok:false, error}; never throws. */
   function signIn(email, password) {
-    if (apiMode()) {
-      return global.ESH.api.login(email, password).then(function (res) {
-        if (res.ok) setCurrent(res.user);
-        return res;
-      });
-    }
-    var u = store.userByEmail(email);
-    if (!u) return { ok: false, error: 'No account found for that email address.' };
-    if (String(u.password) !== String(password)) return { ok: false, error: 'Incorrect password.' };
-    setCurrent(u);
-    return { ok: true, user: u };
+    return global.ESH.api.login(email, password).then(function (res) {
+      if (res.ok) setCurrent(res.user);
+      return res;
+    });
   }
 
-  /* Demo-mode shortcut: assume a role without credentials. Refused outright
-     when a real backend is present — it would be an authentication bypass. */
-  function assume(userId) {
-    if (apiMode()) {
-      return { ok: false, error: 'The demo role switcher is disabled when a real backend is configured.' };
-    }
-    var u = store.userById(userId);
-    if (!u) return { ok: false, error: 'Unknown demo account.' };
-    setCurrent(u);
-    return { ok: true, user: u };
-  }
-
+  /* Clears the local note immediately so the UI updates at once, and returns
+     the server's promise so callers can wait for the cookie to actually die. */
   function signOut() {
-    if (apiMode()) {
-      var p = global.ESH.api.logout();
-      setCurrent(null);
-      return p;
-    }
+    var p = global.ESH.api.logout();
     setCurrent(null);
+    return p;
   }
 
-  function refresh() {
-    if (apiMode()) { current = global.ESH.api.session(); return current; }
-    if (current) current = store.userById(current.id);
-    return current;
-  }
+  /* Re-reads who the server last said we are. Used after a profile edit so the
+     session chip picks up a changed name. */
+  function refresh() { current = global.ESH.api.session(); return current; }
 
   /* ---------------- the gate (delegated) ----------------
      Identical signatures to before, so every existing call site is unchanged.
@@ -212,8 +173,7 @@
   global.ESH.auth = {
     restore: restore, user: user, role: role, refresh: refresh, setCurrent: setCurrent,
     isSupervisor: isSupervisor, isIntern: isIntern, isAuthenticated: isAuthenticated,
-    apiMode: apiMode,
-    signIn: signIn, signOut: signOut, assume: assume,
+    signIn: signIn, signOut: signOut,
     can: can, guard: guard,
     allowedTransitions: allowedTransitions, canTransition: canTransition,
     visibleReports: visibleReports, visibleComments: visibleComments,

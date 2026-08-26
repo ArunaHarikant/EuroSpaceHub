@@ -124,12 +124,9 @@
     '<section class="section">' +
       '<div class="section__head"><h2>Researchers</h2>' +
         '<span class="meta">' + interns.length + ' registered</span>' +
-        /* With a backend there is no public registration form, so this is the
-           only way an account comes into existence. In demo mode researchers
-           self-register at #/register and this would be an odd second path. */
-        (store.apiMode()
-          ? '<button class="btn btn--sm btn--ghost" type="button" id="dAddUser">Add researcher</button>'
-          : '') +
+        /* There is no public registration form, so this is the only way an
+           account comes into existence. */
+        '<button class="btn btn--sm btn--ghost" type="button" id="dAddUser">Add researcher</button>' +
       '</div>' +
       '<div class="tablewrap"><table class="data"><thead><tr>' +
         '<th scope="col">Researcher</th><th scope="col">Institution</th><th scope="col">Programme</th>' +
@@ -158,9 +155,9 @@
   }
 
   /* ---------------- create a researcher account ----------------
-     API mode only. The server generates the initial password and returns it
-     once; it is never stored anywhere it can be read back, so the dialog has
-     to surface it before it closes. */
+     The server generates the initial password and returns it once; it is never
+     stored anywhere it can be read back, so the dialog has to surface it
+     before it closes. */
 
   function openCreateUser() {
     ui.modal({

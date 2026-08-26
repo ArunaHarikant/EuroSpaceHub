@@ -61,7 +61,7 @@
   router.register('/signin',                V.signin);
   router.register('/register',              V.register);
   router.register('/reset',                 V.reset);
-  router.register('/about-demo',            V.aboutDemo);
+  router.register('/access',                V.accessModel);
   router.register('/denied',                V.denied);
   router.setNotFound(V.notFound);
 
@@ -82,7 +82,7 @@
     if (auth.isSupervisor()) {
       items.push({ href: '#/dashboard', label: 'Supervisor dashboard', match: ['/dashboard'] });
     }
-    items.push({ href: '#/about-demo', label: 'Access model', match: ['/about-demo'], spacer: true });
+    items.push({ href: '#/access', label: 'Access model', match: ['/access'], spacer: true });
     return items;
   }
 
@@ -104,12 +104,11 @@
     var themeBtn = '<button class="btn btn--sm btn--ghost themetoggle" type="button" id="themeToggle"></button>';
     if (!u) {
       host.innerHTML = themeBtn +
-        '<a class="btn btn--sm btn--ghost" href="#/signin">Sign in</a>' +
-        '<a class="btn btn--sm btn--primary" href="#/register">Register</a>';
+        '<a class="btn btn--sm btn--primary" href="#/signin">Sign in</a>';
     } else {
-      var roleLabel = u.role === 'supervisor'
-        ? (u.id === store.SUPERVISOR_ID ? 'Supervisor' : 'Co-supervisor')
-        : 'Researcher';
+      /* Co-supervisors are peers, not a lesser rank, and there is no fixed id
+         to single one out against a real database. */
+      var roleLabel = u.role === 'supervisor' ? 'Supervisor' : 'Researcher';
       var unread = auth.notificationsFor(u).filter(function (n) { return n.unread; }).length;
       var bell = '<a class="notifbell" href="#/inbox" title="Notifications" aria-label="Notifications' +
         (unread ? ' (' + unread + ' unread)' : '') + '">' + ICON_BELL +
@@ -147,26 +146,13 @@
   function wireGlobal() {
     document.getElementById('yr').textContent = new Date().getFullYear();
 
-    var banner = document.getElementById('demoBanner');
-    var closeBtn = document.getElementById('demoBannerClose');
-
-    /* The banner has to tell the truth about which build this is. With a
-       backend answering, "no server, no real security" would be a lie. */
-    var tag = document.getElementById('demoBannerTag');
-    var text = document.getElementById('demoBannerText');
-    if (store.apiMode()) {
-      banner.classList.add('demo-banner--live');
-      tag.textContent = 'PRIVATE';
-      text.innerHTML = 'Access is enforced on the server. Report files are stored in ' +
-        'private Backblaze B2 storage and reached only through short-lived signed links. ' +
-        '<a href="#/about-demo">How the access model works &rsaquo;</a>';
-    } else {
-      tag.textContent = 'DEMO MODE';
-      text.innerHTML = 'Authentication and access control in this build are ' +
-        '<strong>simulated in the browser</strong> (no server, no real security). All data is ' +
-        "stored in this browser's <code>localStorage</code>. " +
-        '<a href="#/about-demo">How the access model works &rsaquo;</a>';
-    }
+    var banner = document.getElementById('statusBanner');
+    var closeBtn = document.getElementById('statusBannerClose');
+    document.getElementById('statusBannerTag').textContent = 'PRIVATE';
+    document.getElementById('statusBannerText').innerHTML =
+      'Access is enforced on the server. Report files are stored in private Backblaze B2 ' +
+      'storage and reached only through short-lived signed links. ' +
+      '<a href="#/access">How the access model works &rsaquo;</a>';
     banner.hidden = false;
     try {
       if (global.sessionStorage.getItem('esh.banner.dismissed') === '1') banner.hidden = true;
@@ -183,63 +169,12 @@
       toggle.setAttribute('aria-expanded', String(open));
     });
 
-    var resetBtn = document.getElementById('resetData');
-    if (store.apiMode()) resetBtn.hidden = true;   /* there is no demo data to reset */
-    resetBtn.addEventListener('click', function () {
-      ui.confirmDialog('Reset demonstration data',
-        'This discards every account, report and comment created in this browser and restores the seeded ' +
-        'placeholder content. This cannot be undone.',
-        'Reset everything', function () {
-          store.reset();
-          auth.restore();
-          ui.toast('Demonstration data reset.', 'good');
-          router.navigate('#/');
-        }, true);
-    });
-
-    /* Export the whole store as a JSON file the visitor can keep or move to
-       another browser (the store otherwise lives only in this one). */
+    /* Export what this actor can see, as a JSON file they can keep. There is
+       no matching import: the server owns the data, so a file could only ever
+       overwrite a cache that the next page load refills. */
     document.getElementById('exportData').addEventListener('click', function () {
       ESH.exporter.download('eurospacehub-data.json', 'application/json',
         JSON.stringify(store.getState(), null, 2));
-    });
-
-    /* Import replaces everything, so it is gated behind a confirm and the shape
-       is validated in store.importState(). */
-    var importInput = document.getElementById('importData');
-    /* Import replaces the whole store, which only means something when the
-       store IS the data. With a backend it is a cache the server refills, so
-       the control is withdrawn rather than left to fail quietly. Export stays:
-       a dump of what you can see is still a useful backup. */
-    if (store.apiMode()) {
-      var importLabel = document.querySelector('label[for="importData"]');
-      if (importLabel) importLabel.hidden = true;
-    }
-    importInput.addEventListener('change', function () {
-      var file = importInput.files && importInput.files[0];
-      if (!file) return;
-      var reader = new global.FileReader();
-      reader.onload = function () {
-        var obj;
-        try { obj = JSON.parse(reader.result); }
-        catch (e) { ui.toast('That file is not valid JSON.', 'err'); importInput.value = ''; return; }
-        ui.confirmDialog('Import data',
-          'This replaces every account, report and comment in this browser with the contents of the file. ' +
-          'This cannot be undone. Consider exporting first.',
-          'Replace all data', function () {
-            if (store.importState(obj)) {
-              auth.signOut();
-              ui.toast('Data imported.', 'good');
-              router.navigate('#/');
-            } else {
-              ui.toast(store.apiMode()
-                ? 'Import is unavailable when the hub is backed by a server.'
-                : 'That file is not a valid hub export.', 'err');
-            }
-          }, true);
-        importInput.value = '';
-      };
-      reader.readAsText(file);
     });
   }
 

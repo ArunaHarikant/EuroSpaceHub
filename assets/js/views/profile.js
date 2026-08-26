@@ -151,9 +151,6 @@
       return;
     }
 
-    /* Prof. Foing's own record is the hub landing page, not a generic profile. */
-    if (target.id === store.SUPERVISOR_ID) { router.navigate('#/', true); return; }
-
     var full = auth.can('user:readFull', target, viewer);
     var isSelf = !!viewer && viewer.id === target.id;
     var isSup = auth.isSupervisor();
@@ -263,9 +260,7 @@
           'able to sign in until you give them the new one. It is shown to you once.',
           'Issue password', function () {
             var out = document.getElementById('tempPwOut');
-            /* Synchronous in demo mode, a Promise against the server in API
-               mode — flattened so one path renders both. */
-            Promise.resolve(store.issueTemporaryPassword(target.id)).then(function (temp) {
+            store.issueTemporaryPassword(target.id).then(function (temp) {
               if (!temp) throw new Error('The password could not be issued.');
               out.innerHTML =
                 '<div class="notice notice--warn mt-12"><h4>Temporary password</h4>' +
@@ -415,14 +410,10 @@
      Own account only: `user:edit` lets a supervisor edit an intern's profile,
      but changing someone's password is not editing their profile — the
      supervisor's route is the temporary password on the profile page, which
-     leaves an auditable act rather than a silent takeover.
-
-     API mode only. In demo mode passwords are plaintext in localStorage and a
-     "change password" form would imply a protection that is not there; that
-     build already offers #/reset. */
+     leaves an auditable act rather than a silent takeover. */
 
   function canChangeOwnPassword(target, viewer) {
-    return store.apiMode() && !!viewer && viewer.id === target.id;
+    return !!viewer && viewer.id === target.id;
   }
 
   function passwordSection(target, viewer) {

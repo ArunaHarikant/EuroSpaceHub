@@ -20,17 +20,15 @@
 <div id="backdrop" class="backdrop" aria-hidden="true"></div>
 
 <!-- ============================================================
-     DEMO-MODE BANNER
-     This build ships a STUBBED, client-side authentication and
-     authorisation layer. See README.md § Access control.
+     STATUS BANNER
+     States plainly that this is a closed hub whose access control is
+     enforced server-side. Wording is set in app.js.
      ============================================================ -->
-<div class="demo-banner" id="demoBanner" role="region" aria-label="Build mode notice" hidden>
+<div class="demo-banner demo-banner--live" id="statusBanner" role="region" aria-label="Access notice" hidden>
   <div class="wrap demo-banner__inner">
-    <span class="demo-banner__tag" id="demoBannerTag">DEMO MODE</span>
-    <p class="demo-banner__text" id="demoBannerText"><!-- set by app.js: the wording
-      depends on whether a real backend is answering, and must never claim
-      "no server" when one is running. --></p>
-    <button class="demo-banner__close" type="button" id="demoBannerClose" aria-label="Dismiss notice">&times;</button>
+    <span class="demo-banner__tag" id="statusBannerTag">PRIVATE</span>
+    <p class="demo-banner__text" id="statusBannerText"><!-- set by app.js --></p>
+    <button class="demo-banner__close" type="button" id="statusBannerClose" aria-label="Dismiss notice">&times;</button>
   </div>
 </div>
 
@@ -97,20 +95,18 @@
       </ul>
     </div>
     <div class="footer__col">
-      <h3>This build</h3>
+      <h3>This hub</h3>
       <ul class="linklist">
-        <li><a href="#/about-demo">Access-control model &amp; demo notes</a></li>
+        <li><a href="#/access">How access control works</a></li>
         <li><a href="#/library">Report library (members only)</a></li>
       </ul>
-      <p class="footer__note">Demonstration build. Authentication is simulated client-side.</p>
+      <p class="footer__note">A closed hub. Access is enforced on the server; nothing here is public.</p>
     </div>
   </div>
   <div class="wrap footer__bar">
     <span>&copy; <span id="yr"></span> EuroSpaceHub — Research Hub module</span>
     <span class="footer__tools">
       <button class="linkbtn" type="button" id="exportData">Export data (JSON)</button>
-      <label class="linkbtn" for="importData">Import data<input id="importData" type="file" accept="application/json,.json" hidden></label>
-      <button class="linkbtn" type="button" id="resetData">Reset demo data</button>
     </span>
   </div>
 </footer>

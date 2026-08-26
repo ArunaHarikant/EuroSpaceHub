@@ -1,10 +1,10 @@
 name: CI
 
-# Both suites assert things that fail SILENTLY in the app: a dropped database
-# column, a write that never reaches the server, a permission that is enforced
-# in the browser but not on the server. None of it shows up as an error at
-# runtime — the request succeeds and the value is simply gone on the next read.
-# Running them on every change is the only thing that catches that class.
+# These suites assert things that fail SILENTLY in the app: a dropped database
+# column, a write that never reaches the server, a permission enforced in the
+# browser but not on the server. None of it shows up as an error at runtime —
+# the request succeeds and the value is simply gone on the next read. Running
+# them on every change is the only thing that catches that class.
 
 on:
   push:
@@ -30,21 +30,27 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
+          cache: npm
+          cache-dependency-path: server/package-lock.json
 
       # jsdom is the only frontend dependency and is test-only: the app itself
-      # has no build step and no manifest, so there is nothing to cache or lock.
+      # has no build step and no manifest, so there is nothing to lock.
       - name: Install the test dependency
         run: npm install jsdom --no-save
 
-      # Demo mode: walks every route as each role and asserts on rendered
-      # output and the permission rules.
+      # smoke.mjs boots the REAL server in-process, so express has to be here.
+      - name: Install the server
+        run: npm ci
+        working-directory: server
+
+      # Walks every route as each role against a throwaway database. Every role
+      # change is a real sign-in against a real session cookie.
       - name: Route and permission suite
         run: node tests/smoke.mjs
 
-      # API mode: the boot path against a controlled /api, including the
-      # unreachable-server case.
-      - name: API-mode boot suite
-        run: node tests/api-mode.mjs
+      # The boot path when the server does NOT answer — no database needed.
+      - name: Boot-failure suite
+        run: node tests/boot-failure.mjs
 
   server:
     name: Server (node:test)
