@@ -1,9 +1,21 @@
 /* ==========================================================================
    views/account.js — sign-in, registration and the access-denied page.
 
-   REMINDER: authentication here is a stub. Passwords are stored in plain text
-   in localStorage and compared in the browser. Nothing on this page should be
-   read as a security control; it exists to demonstrate the role model.
+   This page renders differently in the two builds, and the difference is not
+   cosmetic:
+
+   DEMO MODE — passwords sit in plain text in localStorage and are compared in
+   the browser. The role switcher, the open registration form and the on-screen
+   reset link all exist because there is nothing real behind them to protect.
+
+   API MODE — the server owns accounts, sessions and passwords. Each of those
+   affordances is withdrawn, not merely disabled: an open registration form on a
+   closed hub is a way in for anyone with the URL, and a reset form that prints
+   its own token is worse than no reset form at all. Accounts are issued by the
+   supervisor instead.
+
+   store.apiMode() is what separates them, and it is checked here rather than
+   assumed — one page file serves both builds.
    ========================================================================== */
 (function (global) {
   'use strict';
@@ -20,6 +32,7 @@
 
   function signin(ctx) {
     var target = nextFrom(ctx.query);
+    var live = store.apiMode();
     var demoAccounts = [
       { id: store.SUPERVISOR_ID, label: 'Prof. Bernard Foing', sub: 'Supervisor — full access' },
       { id: 'u_cosup',           label: 'Co-Supervisor Name',  sub: 'Supervisor — designated co-supervisor' },
@@ -32,27 +45,33 @@
       '<h1>Sign in</h1>' +
       '<p class="lede">Access your researcher profile, submissions and — for supervisors — the review dashboard.</p>' +
 
-      ui.notice('warn', 'Demonstration authentication',
+      (live ? '' : ui.notice('warn', 'Demonstration authentication',
         'This build has no server. Credentials are checked in the browser against records in ' +
         '<code>localStorage</code>, and the resulting "session" is a user id in the same store. ' +
         'It demonstrates the role model; it is not a security control. ' +
-        '<a href="#/about-demo">Read the access-control notes</a>.') +
+        '<a href="#/about-demo">Read the access-control notes</a>.')) +
 
-      '<div class="split">' +
+      '<div class="' + (live ? 'card-solo' : 'split') + '">' +
         '<form class="card" id="signinForm" novalidate>' +
           '<h3>Sign in with credentials</h3>' +
           '<div class="field"><label for="siEmail">Email address <span class="req">*</span></label>' +
             '<input type="email" id="siEmail" name="email" autocomplete="username" required></div>' +
           '<div class="field"><label for="siPass">Password <span class="req">*</span></label>' +
             '<input type="password" id="siPass" name="password" autocomplete="current-password" required>' +
-            '<p class="field__hint">Every seeded demo account uses the password <code>demo</code>.</p></div>' +
+            (live ? '' : '<p class="field__hint">Every seeded demo account uses the password <code>demo</code>.</p>') +
+          '</div>' +
           '<div class="btn-row"><button class="btn btn--primary" type="submit">Sign in</button>' +
-            '<a class="btn btn--ghost" href="#/register">Register instead</a></div>' +
+            (live ? '' : '<a class="btn btn--ghost" href="#/register">Register instead</a>') + '</div>' +
           '<p id="siErr" class="field__err" hidden></p>' +
           '<p class="field__hint mt-14">' +
-            '<a href="#/reset">Forgotten your password?</a></p>' +
+            (live
+              ? 'Lost your password? Prof. Foing issues a replacement directly — there is no ' +
+                'self-service reset on this hub.'
+              : '<a href="#/reset">Forgotten your password?</a>') +
+          '</p>' +
         '</form>' +
 
+        (live ? '' :
         '<div class="card">' +
           '<h3>Demo role switcher</h3>' +
           '<p class="meta">Assume a role without credentials to explore what each one can see. ' +
@@ -69,7 +88,7 @@
           '<hr>' +
           '<p class="meta mb-0">Signed out you see only Prof. Foing\'s profile ' +
             'page and this sign-in screen — no reports, no library, no researcher profiles.</p>' +
-        '</div>' +
+        '</div>') +
       '</div>' +
     '</div>';
 
@@ -84,10 +103,26 @@
       if (!ui.isEmail(email)) { ui.fieldError(form.elements.email, 'Enter a valid email address.'); ui.focusFirstError(form); return; }
       if (!pass) { ui.fieldError(form.elements.password, 'Enter your password.'); ui.focusFirstError(form); return; }
 
-      var res = auth.signIn(email, pass);
-      if (!res.ok) { errEl.hidden = false; errEl.textContent = res.error; return; }
-      ui.toast('Signed in as ' + res.user.fullName + '.', 'good');
-      router.navigate(res.user.role === 'supervisor' && target === '#/' ? '#/dashboard' : target);
+      /* signIn() is synchronous in demo mode but returns a Promise in API mode.
+         Promise.resolve() flattens both so one path handles each — reading
+         `.ok` straight off an unresolved Promise failed silently and left the
+         backend build with no way to sign in at all. */
+      var btn = form.querySelector('button[type=submit]');
+      btn.disabled = true;
+      Promise.resolve(auth.signIn(email, pass)).then(function (res) {
+        btn.disabled = false;
+        if (!res || !res.ok) {
+          errEl.hidden = false;
+          errEl.textContent = (res && res.error) || 'Sign-in failed. Please try again.';
+          return;
+        }
+        ui.toast('Signed in as ' + res.user.fullName + '.', 'good');
+        router.navigate(res.user.role === 'supervisor' && target === '#/' ? '#/dashboard' : target);
+      })['catch'](function (err) {
+        btn.disabled = false;
+        errEl.hidden = false;
+        errEl.textContent = err.message || 'Sign-in failed. Please try again.';
+      });
     });
 
     ctx.el.querySelectorAll('[data-assume]').forEach(function (b) {
@@ -116,6 +151,23 @@
      ========================================================================== */
 
   function reset(ctx) {
+    /* The demo build prints the reset token on the page because it has no mail
+       service. That is acceptable when the data is fake and stated plainly; it
+       is an account-takeover hole against a real database. Until this build can
+       actually send mail, the supervisor-issued route is the only reset. */
+    if (store.apiMode()) {
+      ctx.el.innerHTML = '<div class="wrap wrap--840">' +
+        '<p class="eyebrow">Password reset</p>' +
+        '<h1>Ask Prof. Foing for a new password</h1>' +
+        ui.notice('info', 'There is no self-service reset',
+          'A reset link has to be emailed to be safe, and this deployment has no mail service ' +
+          'configured. Prof. Foing can issue you a replacement password from your researcher ' +
+          'profile and hand it over directly. Change it from your account page once you are in.') +
+        '<p class="mt-20"><a class="btn btn--primary" href="#/signin">Back to sign in</a></p>' +
+        '</div>';
+      return;
+    }
+
     if (auth.isAuthenticated()) {
       ctx.el.innerHTML = '<div class="wrap">' +
         ui.notice('info', 'You are already signed in',
@@ -266,6 +318,24 @@
   /* ---------------- register ---------------- */
 
   function register(ctx) {
+    /* The demo form writes straight into localStorage. With a backend that
+       account would exist in this one browser and nowhere else, so it could
+       never sign in — sign-in asks the server. Rather than create something
+       broken, say who does issue accounts. */
+    if (store.apiMode()) {
+      ctx.el.innerHTML = '<div class="wrap wrap--840">' +
+        '<p class="eyebrow">Researcher registration</p>' +
+        '<h1>Accounts are issued, not applied for</h1>' +
+        ui.notice('info', 'This hub is closed',
+          'It is a working tool for researchers already placed with Prof. Foing, not a ' +
+          'recruitment channel. Prof. Foing creates your account from the dashboard and hands ' +
+          'you the password directly. If you are expecting access and have not received it, ' +
+          'contact your supervisor.') +
+        '<p class="mt-20"><a class="btn btn--primary" href="#/signin">Back to sign in</a></p>' +
+        '</div>';
+      return;
+    }
+
     if (auth.isAuthenticated()) {
       ctx.el.innerHTML = '<div class="wrap">' +
         ui.notice('info', 'You are already signed in',

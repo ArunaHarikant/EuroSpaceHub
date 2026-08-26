@@ -230,6 +230,9 @@ hr { border: 0; border-top: 1px solid var(--line); margin: 1.75rem 0; }
 .split { display: grid; grid-template-columns: minmax(0,1fr) 340px; gap: 28px; align-items: start; }
 .split--wide { grid-template-columns: 320px minmax(0,1fr); }
 @media (max-width: 900px) { .split, .split--wide { grid-template-columns: minmax(0,1fr); } }
+/* A .split whose second column has been withdrawn (e.g. the sign-in page with
+   no demo role switcher): one column, held to a readable form width. */
+.card-solo { max-width: 560px; }
 
 /* ---------- card ---------- */
 .card {

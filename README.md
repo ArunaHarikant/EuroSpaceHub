@@ -8,39 +8,71 @@ single supervisor dashboard.
 
 **This hub is closed.** It is a working tool for researchers already placed with Prof. Foing — not a
 recruitment channel and not a public archive. There is no internship application or enquiry form,
-and no submitted work is published outside the group. The only surface a signed-out visitor sees is
-Prof. Foing's own profile page and the sign-in screen; reports, the report library and every
-researcher profile require a session.
+and no submitted work is published outside the group. A signed-out visitor sees only the landing
+page — which names the hub and offers a way in, nothing more — and the sign-in screen; reports, the
+report library and every researcher profile require a session.
 
 The module drops into the host platform's navigation (ABOUT / PARTNERS / ACADEMY / BLOG /
 PUBLICATIONS) and also runs standalone.
 
 ---
 
-## ⚠️ Read this first: authentication in this build is a stub
+## Read this first: there are two builds
 
-**There is no server, no session token, no password hashing and no server-side enforcement.**
+The same frontend runs in one of two modes, decided at load time by
+[`config.js`](config.js). Which one you are in is stated in the banner above the header, and every
+page that behaves differently checks `store.apiMode()` rather than assuming.
 
-- Sign-in compares a **plaintext password** held in `localStorage`.
-- The "session" is a **user id string** in `localStorage`, which any visitor can edit from devtools.
-- All data — accounts, reports, comments, internal notes — is stored **in the visitor's own browser**
-  and is readable by anyone using that browser.
-- A **demo role switcher** on the sign-in page lets you assume any role with no credentials at all.
+### API mode — the real build
 
-This is stated on-screen too: a persistent DEMO MODE banner sits above the header, the sign-in and
-registration pages carry explicit warnings, and `#/about-demo` documents the whole model.
+Served by [`server/`](server/README.md): Node + Express + SQLite, with Backblaze B2 for files.
 
-What *is* real is the **shape** of the access model — see [Access control](#access-control) below.
-Porting to a real backend is a substitution, not a rewrite.
+- Passwords are hashed with scrypt and never leave the server.
+- The session is an **httpOnly cookie** backed by a `sessions` row — not a string the browser owns.
+- `can()` runs **server-side** on every request, against the actor from the session row, and a field
+  the caller may not read is absent from the JSON rather than hidden by CSS.
+- Report files go **browser → B2 directly** through a short-lived presigned PUT; the bytes never
+  pass through the app host, and object keys are never sent to the browser.
+- There is no self-service registration and no self-service password reset. The hub is closed:
+  accounts are **issued by the supervisor** from the dashboard, and so are replacement passwords.
+
+### Demo mode — opened from disk, or from any static server
+
+No server, so nothing is enforced: sign-in compares a plaintext password in `localStorage`, the
+"session" is a user id in the same store, all data lives in the visitor's own browser, and a role
+switcher on the sign-in page assumes any role with no credentials. A persistent DEMO MODE banner
+says so, and `#/about-demo` documents the model.
+
+**Demo mode is for reading the UI, not for holding anything real.** Do not point it at real people
+or real unpublished work.
 
 ---
 
 ## Running it
 
-No build step, no dependencies, no framework. Scripts are classic `<script>` tags (not ES modules)
-specifically so the module also works when opened straight from disk.
+The **frontend** has no build step, no dependencies and no framework. Scripts are classic
+`<script>` tags (not ES modules) specifically so the module also works when opened from disk.
 
-**Any static server:**
+### With the backend (API mode)
+
+Node 22.5+ — the database uses the built-in `node:sqlite`, so there is no native module to compile.
+
+```bash
+cd server
+npm install
+cp .env.example .env      # fill in the B2 keys
+npm run seed              # creates the supervisor account, prints its password once
+npm start                 # http://localhost:3000
+```
+
+The server also serves the frontend, so the session cookie is first-party and there is no CORS to
+configure between them. It registers its own `/config.js` ahead of the static handler, which is what
+flips the hub out of demo mode. `GET /api/health` reports whether B2 is actually reachable.
+
+Full backend notes — B2 bucket CORS, deployment, why one Express process rather than serverless —
+are in [`server/README.md`](server/README.md).
+
+### Without the backend (demo mode)
 
 ```bash
 python -m http.server 8000
@@ -50,7 +82,8 @@ python -m http.server 8000
 **Or just open `index.html`** in a browser. `file://` works; only the `localStorage` quota behaves
 slightly differently between browsers.
 
-**Demo accounts** — every seeded account uses the password `demo`:
+**Demo accounts** (demo mode only — the backend seeds one real supervisor instead, see
+`npm run seed`) — every seeded account uses the password `demo`:
 
 | Email | Role |
 |---|---|
@@ -65,14 +98,17 @@ Signed out, you are a public visitor. **Reset demo data** in the footer restores
 ## Access control
 
 Three roles. The rules below are enforced through one gate — `can(action, resource, actor)` in
-[`assets/js/auth.js`](assets/js/auth.js) — plus three derived helpers.
+[`shared/policy.js`](shared/policy.js) — plus three derived helpers. In API mode that same gate runs
+again on the server for every request.
 
 ### Signed-out visitor
 
-**Nothing.** This hub is closed. A signed-out visitor gets exactly two surfaces: Prof. Foing's own
-profile page (bio, titles, research focus, outbound links) and the sign-in / registration screen.
-No reports, no report library, no researcher profiles — not even researcher names or a count of how
-much work exists. `visibleReports()` returns an **empty list** for them, not a filtered one.
+**Nothing.** This hub is closed. A signed-out visitor gets exactly two surfaces: the landing page —
+a gateway carrying no biography, no report titles, no researcher names and no counts — and the
+sign-in screen. No reports, no report library, no researcher profiles, not even a count of how much
+work exists. `visibleReports()` returns an **empty list** for them, not a filtered one, and in API
+mode `/bootstrap` returns empty arrays to an unauthenticated caller rather than relying on the
+browser to filter.
 
 ### Intern / student researcher
 
@@ -94,13 +130,21 @@ hard-coded to one account — `u_cosup` is a second supervisor demonstrating ext
 
 ### How it is enforced
 
+The rules live in **one file that both sides load**: [`shared/policy.js`](shared/policy.js) is a
+`<script>` tag in the browser and a `require()` in the server. There is no client copy to drift out
+of sync — a test asserts the two are literally the same module instance.
+
 | Mechanism | Where |
 |---|---|
-| `can(action, resource, actor)` — the single authorisation gate | `auth.js` |
-| `visibleReports(actor)` — every list view derives from this, never from the raw store | `auth.js` |
-| `visibleComments(report, actor)` — strips internal comments for non-supervisors | `auth.js` |
-| `projectUser(target, actor)` — returns only the fields the actor may read | `auth.js` |
+| `can(action, resource, actor)` — the single authorisation gate | `shared/policy.js` |
+| `visibleReports(actor)` — every list view derives from this, never from the raw store | `shared/policy.js` |
+| `visibleComments(report, actor)` — strips internal comments for non-supervisors | `shared/policy.js` |
+| `projectUser(target, actor)` — returns only the fields the actor may read | `shared/policy.js` |
 | `guard(requirement)` — route-level gate, applied in the route table | `auth.js` / `app.js` |
+| The same gate, re-run server-side on every request | `server/routes/*.js` |
+
+`actor` is a required, explicit argument — there is deliberately no ambient session in the policy
+module. On the server the actor comes from the session row; the request body is never consulted.
 
 Two deliberate choices worth noting:
 
@@ -115,12 +159,13 @@ Two deliberate choices worth noting:
    per-profile `publicProfile` opt-in was deleted outright rather than left as a setting that does
    nothing.
 
-### Porting to a real backend
+### The client copy is an affordance, not a control
 
-Replace the stub session with a real one and re-implement `can()` server-side against the same
-action names (`report:read`, `report:setStatus`, `comment:readInternal`, `user:readInternalNotes`, …).
-The client-side copy then becomes what it should be: a UI affordance that hides controls the user
-cannot use, backed by an authority that actually enforces them.
+In API mode the browser's `can()` calls do exactly what they should: hide controls the user cannot
+use, so the interface does not offer actions that will be refused. The authority is the identical
+check on the server. If the two ever disagree, the server wins and the optimistic local change is
+rolled back by re-hydrating from `/bootstrap` — see § API mode writes in
+[`store.js`](assets/js/store.js).
 
 ---
 
@@ -139,7 +184,8 @@ Draft ──► Submitted ──► Under Review ──► Approved ──► Pu
   the supervisor opens the record (`Under Review`). They may withdraw at any point before approval.
   Edit and Withdraw controls sit on each row of their profile's submissions table.
 - **Supervisors** drive every other transition, comment (publicly or internally), and feature records.
-- `Approved` and `Published` are the two public states.
+- `Approved` and `Published` are the two **released** states — visible to the group through the
+  shared library. Nothing here is public; see the naming note above.
 - Moving a record out of a public state **automatically clears its featured flag**, so the curated
   feed on the Foing page cannot retain a withdrawn or rejected item.
 
@@ -155,54 +201,65 @@ The exact transition table is in `store.TRANSITIONS` and is rendered live at `#/
 | `#/library` | members | Searchable/filterable library of Approved + Published records shared with the group (mission area, type, author, year, keyword, sort) |
 | `#/report/:id` | members | Record detail. A colleague gets abstract, metadata, file and citation for a released record. Author and supervisor additionally get workflow state, review thread and status history |
 | `#/researcher/:id` | members | Researcher profile with progressive disclosure (see above) |
-| `#/register` · `#/signin` | public | Registration and stubbed sign-in with the demo role switcher |
+| `#/signin` | public | Sign-in. Demo mode adds the role switcher and a link to register; API mode shows neither |
+| `#/register` · `#/reset` | public | Open forms in demo mode. In API mode both explain that the supervisor issues accounts and passwords |
+| `#/inbox` | authenticated | Derived "waiting on you" list; its read-marker is per account and server-persisted |
 | `#/me` · `#/researcher/:id/edit` | authenticated | Own profile and profile editing |
 | `#/submit` · `#/report/:id/edit` | intern/supervisor | Report submission and editing |
-| `#/dashboard` | supervisor | Analytics, full report table, researcher roster |
+| `#/dashboard` | supervisor | Analytics, full report table, researcher roster, account creation |
 | `#/about-demo` | public | The access-control model, rendered from the live rules |
 
 ---
 
-## Known limitations of the demo build
+## Accounts, passwords and files
 
-**Uploaded files are not persisted.** `localStorage` holds a few megabytes; PDFs would exhaust it
-immediately. The store therefore saves a file's **name, size and type** and keeps the binary in an
-in-memory blob for the current tab. Downloads work until you reload, after which the record shows
-the metadata and states plainly that the file is unavailable. Silently dropping the upload, or
-pretending it had been stored, would have been worse.
+### Accounts
 
-Other consequences of having no backend: profile photographs are referenced by URL rather than
-uploaded, and password reset cannot email you (see below).
+**API mode.** Accounts are **issued by the supervisor** from the dashboard (Researchers → *Add
+researcher*), never applied for. The server generates the initial password, returns it exactly once,
+and stores only its scrypt hash — so it is displayed in a dialog that says it will not be shown
+again. `#/register` renders an explanation instead of a form.
 
-### Password reset
+This is a deliberate choice, not a missing feature: an open registration form on a closed hub is a
+way in for anyone who has the URL. `can('user:create')` is supervisor-only and enforced server-side,
+so the absent form is a convenience, not the control.
 
-Two routes, at `#/reset` and from the supervisor's view of any researcher profile.
+**Demo mode.** `#/register` is an open form writing to `localStorage`, because there is nothing
+behind it worth protecting.
 
-**Self-service link.** A researcher enters their address and a single-use token with a 30-minute
-expiry is issued. The token is invalidated the moment it is spent and re-checked at spend time —
-that lifecycle is the real thing.
+### Passwords
 
-**The part that is not real: no email is sent, because there is nothing to send it with.** The link
-is rendered on the page instead of going to the mailbox, which means **anyone who knows an address
-can reset that account**. The page says exactly that, in red, above the form.
+**API mode.** scrypt via `node:crypto`, salted per account, and changing a password deletes every
+existing session for that user. There is **no self-service reset**: a reset link has to be emailed to
+prove control of the mailbox, and no mail service is configured. `#/reset` says so and points at the
+supervisor.
 
-A real backend answers *"if an account exists, we have emailed it"* either way, so the form cannot
-be used to discover which addresses are registered. This build does **not** claim that, for two
-reasons: it would be a lie (nothing was emailed), and displaying the link reveals whether the
-account exists regardless — anti-enumeration cannot survive putting the token on screen. So the UI
-states what actually happened, and an unmatched address is told so plainly, along with the reason it
-is the most likely outcome: accounts live in one browser's `localStorage` and do not travel between
-browsers, devices or private windows. `store.requestPasswordReset()` still implements the neutral
-code path a real backend keeps; only the message differs.
+**Supervisor-issued replacement.** From any researcher profile, the supervisor issues a temporary
+password, shown once, which replaces the account password immediately and drops that user's
+sessions. It needs no email at all, and for a closed group of this size it is arguably the right
+mechanism to keep even after email works. Supervisors cannot reset each other.
 
-Swapping this one step for a genuine emailed token is the single most important change a production
-build must make. **Until then, prefer the supervisor-issued route below** — it is secure as designed,
-whereas a reset form that prints its own token is worse than no reset form at all.
+**Demo mode** additionally exposes `#/reset`, which prints its own token on the page because it
+cannot send one — meaning anyone who knows an address can reset that account. The page states this
+in red, above the form. It is acceptable only because the data behind it is placeholder.
 
-**Supervisor-issued temporary password.** Prof. Foing can issue a temporary password from any
-researcher profile and hand it over directly. It is displayed once and replaces the account password
-immediately. This route needs no email at all, and for a closed group of this size it is arguably
-the better mechanism to keep even after email works. Supervisors cannot reset each other.
+> Adding a genuine emailed token is the one change that would let self-service reset be turned on.
+> Until then the supervisor route is the only one, in both builds — a reset form that prints its own
+> token is worse than no reset form at all.
+
+### Files
+
+**API mode.** Report files live in a **private Backblaze B2 bucket**. Uploads go browser → B2
+directly through a presigned PUT that this server minted, against a single-use `uploads` row binding
+the key to one report and one user; the server then HEADs the object before recording it. Downloads
+are short-lived signed GETs issued only after `can('file:download')` passes. The bytes never touch
+the app host and B2 object keys are never sent to the browser. PDF, DOCX and PPTX, 25 MB.
+
+**Demo mode.** `localStorage` holds a few megabytes, so PDFs would exhaust it immediately. The store
+saves a file's **name, size and type** and keeps the binary in an in-memory blob for the current tab.
+Downloads work until you reload, after which the record shows the metadata and states plainly that
+the file is unavailable. Silently dropping the upload, or pretending it had been stored, would have
+been worse. Profile photographs are referenced by URL rather than uploaded.
 
 ---
 
@@ -253,38 +310,66 @@ Status colours never carry meaning alone — every badge pairs a colour with a d
 
 ```
 index.html                    page shell, host-platform nav, script tags
+config.js                     demo-mode fallback config; the server overrides /config.js
+shared/
+  policy.js                   THE authorisation gate + vocabularies — loaded by BOTH sides
 assets/css/styles.css         design system (single stylesheet)
 assets/js/
-  store.js                    data model, seed content, localStorage persistence
-  auth.js                     STUBBED auth + the authorisation layer
+  api.js                      backend client; inert unless ESH_CONFIG.apiBase is set
+  store.js                    data model + seed content; a read model in API mode
+  auth.js                     session handling; delegates every rule to shared/policy.js
   ui.js                       escaping, formatters, badges, modal, toasts
+  export.js                   BibTeX / RIS / CSV citations, JSON backup
   charts.js                   inline-SVG bar charts
   backdrop.js                 decorative ESA/NASA mission backdrop
   router.js                   hash router with route guards
   app.js                      route table, chrome, bootstrap
   views/
-    foing.js                  public hub landing page
-    library.js                public report archive
+    foing.js                  landing page (gateway only — no biography)
+    library.js                shared report library (Approved + Published)
     report.js                 report detail (all roles)
-    account.js                sign-in, registration, access-denied
+    account.js                sign-in, registration, reset, access-denied
     profile.js                researcher profile + editing
     submit.js                 report submission + editing
-    dashboard.js              supervisor dashboard
+    dashboard.js              supervisor dashboard + account creation
+    inbox.js                  derived "waiting on you" notifications
     misc.js                   access-control page, 404
-tests/smoke.mjs               headless route + permission test suite
+server/
+  index.js                    Express app, static hosting, /config.js override
+  db.js                       SQLite schema, additive migrations, row mapping
+  session.js                  scrypt hashing, httpOnly cookie sessions, requireAuth
+  storage.js                  Backblaze B2 (S3-compatible) presigning
+  seed.js                     creates the first supervisor account
+  routes/auth.js              login, logout, password change, temporary passwords
+  routes/data.js              reports, comments, profiles, account creation
+  routes/files.js             presigned upload / download / delete
+  test/api.test.js            server-side authorisation tests
+tests/smoke.mjs               headless route + permission test suite (frontend)
 ```
 
 ### Tests
 
-`tests/smoke.mjs` loads the real page in jsdom over HTTP, walks every route as each role, and
-asserts on both rendered output and the permission rules — including that drafts never reach the
-public library, that interns cannot read internal comments, that the workflow transition table
-holds, and that user content is escaped. 137 assertions.
+Two suites, and they test different things.
+
+**`tests/smoke.mjs`** — loads the real page in jsdom over HTTP, walks every route as each role, and
+asserts on both rendered output and the permission rules: that drafts never reach the shared library,
+that interns cannot read internal comments, that the workflow transition table holds, and that user
+content is escaped. **286 assertions.**
 
 ```bash
-python -m http.server 8731          # serve the app in one terminal
 npm install jsdom                   # one dependency, test-only
-node tests/smoke.mjs                # in another
+node tests/smoke.mjs                # self-hosts its own server; nothing else needed
+```
+
+**`server/test/api.test.js`** — matters more, because it asserts what an **attacker** cannot do,
+against the real HTTP API with real cookies. Nothing in it loads the frontend; the browser's opinion
+is irrelevant. It also covers field round-trips, since a dropped column produces no error anywhere —
+the request succeeds and the value is simply gone on the next read. **32 tests.** B2 is not
+contacted: the presign path is covered by asserting requests are refused *before* any signing
+happens, and the tests needing real Backblaze credentials skip unless `B2_KEY_ID` is set.
+
+```bash
+cd server && npm install && npm test
 ```
 
 ---

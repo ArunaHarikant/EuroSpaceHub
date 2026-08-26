@@ -112,7 +112,14 @@
   var users = {
     list:   function ()         { return get('/users'); },
     get:    function (id)       { return get('/users/' + encodeURIComponent(id)); },
-    update: function (id, body) { return patch('/users/' + encodeURIComponent(id), body); }
+    update: function (id, body) { return patch('/users/' + encodeURIComponent(id), body); },
+    /* Supervisor-only. Resolves with the new user AND the one-time initial
+       password, which the caller must display immediately — it is not stored
+       anywhere in retrievable form and cannot be shown again. */
+    create: function (body)     { return post('/users', body); },
+    markNotificationsSeen: function (id) {
+      return post('/users/' + encodeURIComponent(id) + '/notifications-seen', {});
+    }
   };
 
   /* ---------------- files ---------------- */

@@ -1,7 +1,13 @@
-# Test-only dependency: `npm install jsdom` before running tests/smoke.mjs
+# Test-only dependency at the REPO ROOT: `npm install jsdom` before running
+# tests/smoke.mjs. The frontend itself has no build step and no manifest.
+#
+# These patterns are anchored with a leading slash on purpose. Unanchored, git
+# applies them at every depth, which silently excluded server/package.json —
+# the backend's real dependency manifest — and left a fresh clone unable to
+# run `npm install` at all.
 node_modules/
-package-lock.json
-package.json
+/package-lock.json
+/package.json
 
 # OS / editor cruft
 .DS_Store

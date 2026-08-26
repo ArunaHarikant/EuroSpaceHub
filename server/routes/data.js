@@ -15,7 +15,9 @@ const express = require('express');
 const policy = require('../../shared/policy.js');
 const db = require('../db.js');
 const storage = require('../storage.js');
-const { requireAuth } = require('../session.js');
+const session = require('../session.js');
+const crypto = require('node:crypto');
+const { requireAuth } = session;
 
 const router = express.Router();
 
@@ -70,7 +72,7 @@ router.get('/reports/:id', requireAuth, (req, res) => {
 
 /* Fields a client may set. `status`, `featured`, `file` and `history` are
    absent on purpose — each has its own gated route. */
-const WRITABLE = ['title','missionArea','reportType','abstract','keywords',
+const WRITABLE = ['title','missionArea','reportType','campaign','abstract','keywords',
                   'coAuthors','supplementary','dataAvailability'];
 
 function readBody(body) {
@@ -91,6 +93,12 @@ function validate(patch, { partial }) {
   }
   if ('reportType' in patch && !policy.REPORT_TYPES.includes(patch.reportType)) {
     return 'Unknown report type.';
+  }
+  /* Campaign is a free-text grouping label, not a controlled vocabulary — the
+     suggestions in the form are conveniences, not a closed set. Only the length
+     is enforced, so a typo groups badly rather than being rejected. */
+  if ('campaign' in patch && String(patch.campaign || '').length > 120) {
+    return 'That campaign name is too long.';
   }
   return null;
 }
@@ -272,6 +280,71 @@ router.patch('/users/:id', requireAuth, (req, res) => {
   }
 
   res.json({ user: policy.projectUser(db.updateUser(target.id, patch), req.actor) });
+});
+
+/* Create a researcher account. Supervisor-only: this hub is closed, so accounts
+   are issued, not applied for. The initial password is generated here and shown
+   to the supervisor exactly once to hand over — we never accept a password from
+   the request body, so a chosen-password field cannot leak through logs. */
+router.post('/users', requireAuth, (req, res) => {
+  if (!policy.can('user:create', null, req.actor)) {
+    return res.status(403).json({ error: 'Only a supervisor may create accounts.' });
+  }
+  const body = req.body || {};
+  const fullName = String(body.fullName || '').trim();
+  const email = String(body.email || '').trim();
+
+  if (!fullName) return res.status(400).json({ error: 'A full name is required.' });
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+    return res.status(400).json({ error: 'A valid email address is required.' });
+  }
+  if (db.userByEmail(email)) {
+    return res.status(409).json({ error: 'An account already uses that address.' });
+  }
+
+  /* Role is whitelisted rather than passed through: a typo must not silently
+     create something that is neither an intern nor a supervisor. */
+  const role = body.role === 'supervisor' ? 'supervisor' : 'intern';
+
+  const initialPassword = crypto.randomBytes(9).toString('base64url');
+  const { hash, salt } = session.hashPassword(initialPassword);
+
+  const user = db.insertUser({
+    id: db.uid('u'),
+    role,
+    fullName,
+    email,
+    passwordHash: hash,
+    passwordSalt: salt,
+    institution: String(body.institution || ''),
+    programme: String(body.programme || ''),
+    supervisorId: role === 'intern' ? req.actor.id : null,
+    startDate: String(body.startDate || ''),
+    endDate: String(body.endDate || ''),
+    researchTopic: String(body.researchTopic || ''),
+    keywords: Array.isArray(body.keywords) ? body.keywords : [],
+    bio: String(body.bio || ''),
+    standing: 'active',
+    createdAt: db.nowISO()
+  });
+
+  res.status(201).json({
+    user: policy.projectUser(user, req.actor),
+    initialPassword                      /* shown once, to the supervisor */
+  });
+});
+
+/* The "waiting on you" inbox marks itself read against this timestamp. It is
+   the actor's own marker and carries no authority, but it still goes through
+   the gate so that one account cannot silently clear another's inbox. */
+router.post('/users/:id/notifications-seen', requireAuth, (req, res) => {
+  const target = db.userById(req.params.id);
+  if (!target) return res.status(404).json({ error: 'Researcher not found.' });
+  if (!policy.can('user:markNotificationsSeen', target, req.actor)) {
+    return res.status(403).json({ error: 'Not permitted.' });
+  }
+  const updated = db.updateUser(target.id, { notificationsSeenAt: db.nowISO() });
+  res.json({ user: policy.projectUser(updated, req.actor) });
 });
 
 module.exports = router;

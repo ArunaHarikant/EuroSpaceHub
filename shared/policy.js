@@ -202,6 +202,17 @@
       case 'user:listAll':
         return sup;
 
+      /* Accounts are created BY the supervisor, not applied for. The hub is
+         closed: self-service registration would let any visitor with the URL
+         into a group they were never placed with. The demo build keeps an open
+         registration form because there is nothing behind it to protect. */
+      case 'user:create':
+        return sup;
+
+      /* Everyone owns their own read-marker; nobody else touches it. */
+      case 'user:markNotificationsSeen':
+        return !!actor && !!resource && resource.id === actor.id;
+
       /* ---- areas ---- */
       case 'library:view':                               /* the shared report library */
         return !!actor;

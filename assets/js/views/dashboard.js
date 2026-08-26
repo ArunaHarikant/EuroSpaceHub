@@ -123,7 +123,14 @@
     return '' +
     '<section class="section">' +
       '<div class="section__head"><h2>Researchers</h2>' +
-        '<span class="meta">' + interns.length + ' registered</span></div>' +
+        '<span class="meta">' + interns.length + ' registered</span>' +
+        /* With a backend there is no public registration form, so this is the
+           only way an account comes into existence. In demo mode researchers
+           self-register at #/register and this would be an odd second path. */
+        (store.apiMode()
+          ? '<button class="btn btn--sm btn--ghost" type="button" id="dAddUser">Add researcher</button>'
+          : '') +
+      '</div>' +
       '<div class="tablewrap"><table class="data"><thead><tr>' +
         '<th scope="col">Researcher</th><th scope="col">Institution</th><th scope="col">Programme</th>' +
         '<th scope="col">Period</th><th scope="col">Standing</th>' +
@@ -148,6 +155,92 @@
       }).join('') : '<tr><td colspan="9" class="muted">No researchers registered yet.</td></tr>') +
       '</tbody></table></div>' +
     '</section>';
+  }
+
+  /* ---------------- create a researcher account ----------------
+     API mode only. The server generates the initial password and returns it
+     once; it is never stored anywhere it can be read back, so the dialog has
+     to surface it before it closes. */
+
+  function openCreateUser() {
+    ui.modal({
+      title: 'Add a researcher',
+      confirmLabel: 'Create account',
+      body:
+        '<form id="cuForm" novalidate>' +
+          '<div class="field"><label for="cuName">Full name <span class="req">*</span></label>' +
+            '<input type="text" id="cuName" name="fullName" autocomplete="off" required></div>' +
+          '<div class="field"><label for="cuEmail">Email address <span class="req">*</span></label>' +
+            '<input type="email" id="cuEmail" name="email" autocomplete="off" required></div>' +
+          '<div class="field"><label for="cuInst">Institution</label>' +
+            '<input type="text" id="cuInst" name="institution" list="cuInstList" autocomplete="off">' +
+            '<datalist id="cuInstList">' +
+              (store.INSTITUTIONS || []).map(function (i) {
+                return '<option value="' + esc(i) + '"></option>';
+              }).join('') +
+            '</datalist></div>' +
+          '<div class="field"><label for="cuProg">Programme</label>' +
+            '<input type="text" id="cuProg" name="programme" autocomplete="off"></div>' +
+          '<div class="field"><label for="cuStart">Research period start</label>' +
+            '<input type="date" id="cuStart" name="startDate"></div>' +
+          '<div class="field"><label for="cuEnd">Research period end</label>' +
+            '<input type="date" id="cuEnd" name="endDate"></div>' +
+          '<div class="field"><label for="cuTopic">Research topic</label>' +
+            '<input type="text" id="cuTopic" name="researchTopic" autocomplete="off"></div>' +
+          '<p class="field__hint">An initial password is generated and shown to you once. Hand it ' +
+            'over directly; they can change it from their account page.</p>' +
+          '<p id="cuErr" class="field__err" hidden></p>' +
+        '</form>',
+      /* Returning truthy keeps the dialog open — the request is in flight and
+         may still be refused, so the form must survive to show the error. */
+      onConfirm: function (back) { submitCreateUser(back); return true; }
+    });
+  }
+
+  function submitCreateUser(back) {
+    var form = document.getElementById('cuForm');
+    var errEl = document.getElementById('cuErr');
+    errEl.hidden = true;
+    ui.clearAllErrors(form);
+
+    var name = form.elements.fullName.value.trim();
+    var email = form.elements.email.value.trim();
+    if (!name) { ui.fieldError(form.elements.fullName, 'A full name is required.'); ui.focusFirstError(form); return; }
+    if (!ui.isEmail(email)) { ui.fieldError(form.elements.email, 'Enter a valid email address.'); ui.focusFirstError(form); return; }
+
+    var confirmBtn = back.querySelector('[data-confirm]');
+    if (confirmBtn) confirmBtn.disabled = true;
+
+    store.createUser({
+      fullName: name,
+      email: email,
+      role: 'intern',
+      institution: form.elements.institution.value.trim(),
+      programme: form.elements.programme.value.trim(),
+      startDate: form.elements.startDate.value,
+      endDate: form.elements.endDate.value,
+      researchTopic: form.elements.researchTopic.value.trim()
+    }).then(function (res) {
+      ui.closeModal();
+      /* A modal rather than a toast: a toast dismisses itself, and this is the
+         only moment the password exists in readable form. */
+      ui.modal({
+        title: 'Account created',
+        cancelLabel: 'Done',
+        body:
+          '<p>An account for <strong>' + esc(res.user.fullName) + '</strong> is ready.</p>' +
+          '<div class="notice notice--warn mt-12"><h4>Initial password</h4>' +
+            '<p class="mb-0"><code class="fs-105">' + esc(res.initialPassword) + '</code></p>' +
+            '<p class="meta mt-8 mb-0">Copy it now — it is not shown again. Hand it over ' +
+              'directly rather than emailing it, and ask them to change it once signed in.</p>' +
+          '</div>'
+      });
+      router.resolve();
+    })['catch'](function (err) {
+      if (confirmBtn) confirmBtn.disabled = false;
+      errEl.hidden = false;
+      errEl.textContent = err.message || 'The account could not be created.';
+    });
   }
 
   /* ---------------- report table ---------------- */
@@ -427,6 +520,9 @@
       router.resolve();
       if (typeof global.scrollTo === 'function') global.scrollTo(0, y);
     }
+
+    var addUserBtn = document.getElementById('dAddUser');
+    if (addUserBtn) addUserBtn.addEventListener('click', openCreateUser);
 
     var form = document.getElementById('dashFilters');
     function apply() {

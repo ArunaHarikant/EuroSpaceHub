@@ -261,13 +261,21 @@
           'This immediately replaces ' + target.fullName + '’s current password. They will not be ' +
           'able to sign in until you give them the new one. It is shown to you once.',
           'Issue password', function () {
-            var temp = store.issueTemporaryPassword(target.id);
-            document.getElementById('tempPwOut').innerHTML =
-              '<div class="notice notice--warn mt-12"><h4>Temporary password</h4>' +
-              '<p class="mb-0"><code class="fs-105">' + esc(temp) + '</code></p>' +
-              '<p class="meta mt-8 mb-0">Give this to the researcher directly. It is not ' +
-              'shown again — reissue if you lose it, and ask them to change it once signed in.</p></div>';
-            ui.toast('Temporary password issued.', 'good');
+            var out = document.getElementById('tempPwOut');
+            /* Synchronous in demo mode, a Promise against the server in API
+               mode — flattened so one path renders both. */
+            Promise.resolve(store.issueTemporaryPassword(target.id)).then(function (temp) {
+              if (!temp) throw new Error('The password could not be issued.');
+              out.innerHTML =
+                '<div class="notice notice--warn mt-12"><h4>Temporary password</h4>' +
+                '<p class="mb-0"><code class="fs-105">' + esc(temp) + '</code></p>' +
+                '<p class="meta mt-8 mb-0">Give this to the researcher directly. It is not ' +
+                'shown again — reissue if you lose it, and ask them to change it once signed in.</p></div>';
+              ui.toast('Temporary password issued.', 'good');
+            })['catch'](function (err) {
+              out.innerHTML = '<div class="notice notice--err mt-12"><p class="mb-0">' +
+                esc(err.message || 'The password could not be issued.') + '</p></div>';
+            });
           }, true);
       });
     }

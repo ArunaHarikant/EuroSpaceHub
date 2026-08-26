@@ -565,7 +565,15 @@
 
   /* ---------------- mutations ---------------- */
 
+  /* Local-only account creation, for the demo build. In API mode the server
+     owns the user table, so writing here would produce an account that exists
+     in one browser and nowhere else — it could never sign in, because sign-in
+     goes to the server. Callers must use createUser() instead; this throws
+     rather than half-working. */
   function addUser(u) {
+    if (apiMode()) {
+      throw new Error('addUser() is demo-mode only. Use store.createUser() when a backend is configured.');
+    }
     var rec = Object.assign({
       id: uid('u'), role: 'intern', fullName: '', email: '', password: 'demo',
       institution: '', programme: '', supervisorId: SUPERVISOR_ID,
@@ -593,6 +601,7 @@
   function markNotificationsSeen(userId) {
     var u = userById(userId);
     if (!u) return null;
+    if (apiMode()) sync(global.ESH.api.users.markNotificationsSeen(userId), 'Marking notifications read');
     u.notificationsSeenAt = nowISO();
     save();
     return u;
@@ -728,6 +737,17 @@
   function issueTemporaryPassword(userId) {
     var u = userById(userId);
     if (!u) return null;
+    /* With a backend, only the server can actually change a password. Writing
+       one into the local cache would print a password to the supervisor that
+       the server had never heard of — they would hand over a credential that
+       does not work. Returns a Promise here and a string in demo mode; callers
+       flatten with Promise.resolve(). */
+    if (apiMode()) {
+      return global.ESH.api.issueTemporaryPassword(userId).then(function (res) {
+        if (!res.ok) throw new Error(res.error || 'The password could not be issued.');
+        return res.temporaryPassword;
+      });
+    }
     var temp = randomToken().slice(0, 10);
     u.password = temp;
     delete u.resetToken;
@@ -782,6 +802,22 @@
     });
   }
 
+  /* Async, server-first account creation. Supervisor-only on the server side.
+     Resolves with { user, initialPassword } — the password is shown once and
+     is not retrievable afterwards, so the caller must display it immediately.
+     In demo mode it falls back to the local table and reports the seeded
+     password, keeping one call signature for both builds. */
+  function createUser(patch) {
+    if (!apiMode()) {
+      var local = addUser(patch);
+      return Promise.resolve({ user: local, initialPassword: local.password });
+    }
+    return global.ESH.api.users.create(patch).then(function (d) {
+      getState().users.push(d.user);
+      return { user: d.user, initialPassword: d.initialPassword };
+    });
+  }
+
   /* Async, server-first creation. Used by the submission form, which must
      have a real report id before it can upload a file against it. */
   function createReport(patch) {
@@ -815,7 +851,7 @@
     reports: reports, reportById: reportById, reportsByOwner: reportsByOwner,
     releasedReports: releasedReports, isReleased: isReleased, authorLine: authorLine,
 
-    addUser: addUser, updateUser: updateUser, markNotificationsSeen: markNotificationsSeen,
+    addUser: addUser, createUser: createUser, updateUser: updateUser, markNotificationsSeen: markNotificationsSeen,
     addReport: addReport, updateReport: updateReport,
     setStatus: setStatus, logHistory: logHistory, addComment: addComment,
 
