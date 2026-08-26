@@ -852,12 +852,17 @@
      and hand the error to the UI. */
   function sync(promise, what) {
     if (!promise || !promise.then) return promise;
-    return promise.catch(function (err) {
-      return hydrate().then(function () {
-        if (onSyncError) onSyncError(err, what);
-        else console.error('[store] ' + what + ' failed:', err);
-        throw err;
-      });
+    return promise['catch'](function (err) {
+      /* Re-sync so the optimistic change is rolled back. If that ALSO fails —
+         the server has gone away entirely — the rollback is what is lost, not
+         the report: swallow the second failure so the first one still reaches
+         the user, who would otherwise be told nothing at all. */
+      return hydrate()['catch'](function () {})
+        .then(function () {
+          if (onSyncError) onSyncError(err, what);
+          else console.error('[store] ' + what + ' failed:', err);
+          throw err;
+        });
     });
   }
 

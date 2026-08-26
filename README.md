@@ -369,12 +369,19 @@ server/
   routes/data.js              reports, comments, profiles, account creation
   routes/files.js             presigned upload / download / delete
   test/api.test.js            server-side authorisation tests
-tests/smoke.mjs               headless route + permission test suite (frontend)
+tests/
+  smoke.mjs                   headless route + permission suite (demo mode)
+  api-mode.mjs                boot path against a controlled /api (API mode)
+.github/workflows/ci.yml      runs all three suites on every pull request
 ```
 
 ### Tests
 
-Two suites, and they test different things.
+Three suites, and they test different things. All of them run on every pull
+request — see [`.github/workflows/ci.yml`](.github/workflows/ci.yml). That matters more here than
+usual: every bug this project has shipped in the API path failed *silently*, with the request
+succeeding and the value simply gone on the next read. A round-trip assertion is the only thing
+that catches that.
 
 **`tests/smoke.mjs`** — loads the real page in jsdom over HTTP, walks every route as each role, and
 asserts on both rendered output and the permission rules: that drafts never reach the shared library,
@@ -396,6 +403,20 @@ happens, and the tests needing real Backblaze credentials skip unless `B2_KEY_ID
 ```bash
 cd server && npm install && npm test
 ```
+
+**`tests/api-mode.mjs`** — the frontend's *other* build. `smoke.mjs` serves the repo's own
+`config.js`, which leaves `apiBase` null, so `api.js` stays inert and none of it is ever executed.
+This suite serves a config that turns API mode on and controls what `/api` answers, covering the
+boot path and — the case that motivated it — an unreachable server, which must not be rendered as
+an empty hub. **12 assertions.**
+
+```bash
+node tests/api-mode.mjs
+```
+
+> jsdom ships no `fetch`, and the app requires one. The suite installs a polyfill in `beforeParse`;
+> without it every API call throws `ReferenceError` and the suite measures the harness rather than
+> the application. That trap produced a wrong reading of this behaviour once already.
 
 ---
 

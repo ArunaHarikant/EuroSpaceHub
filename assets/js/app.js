@@ -259,14 +259,39 @@
 
     /* API mode does one /bootstrap round trip before the first render, so the
        first paint shows the server's truth rather than a guess. */
-    store.hydrate().catch(function (err) {
-      console.error('[boot] could not reach the API; falling back to local data.', err);
-      store.load();
-    }).then(function () {
+    store.hydrate().then(function () {
       auth.restore();
       renderChrome();
       router.start();
+    })['catch'](function (err) {
+      /* This used to call store.load(), which seeds placeholder content when
+         localStorage is empty — six invented reports and seven invented
+         accounts, under a banner reading "access is enforced on the server".
+         There is nothing safe to show here: say so and stop. */
+      console.error('[boot] could not reach the API.', err);
+      showUnreachable();
     });
+  }
+
+  /* A dead end on purpose. Starting the router would paint an empty hub, which
+     reads as "there is nothing here" rather than "we could not ask". */
+  function showUnreachable() {
+    var view = document.getElementById('view');
+    if (!view) return;
+    view.innerHTML =
+      '<div class="wrap wrap--840">' +
+        '<p class="eyebrow">EuroSpaceHub · Research Hub</p>' +
+        '<h1>The hub cannot reach its server</h1>' +
+        ui.notice('err', 'Nothing has been loaded',
+          'Your work is safe — this is a connection problem, not a data problem. ' +
+          'Nothing is shown because nothing could be fetched, and showing an empty ' +
+          'hub would look like an empty hub rather than a failure.') +
+        '<p class="mt-20"><button class="btn btn--primary" type="button" id="retryBoot">Try again</button></p>' +
+        '<p class="meta mt-14">If this persists, the server may be restarting or down for ' +
+          'maintenance. Contact your supervisor if it does not clear.</p>' +
+      '</div>';
+    var retry = document.getElementById('retryBoot');
+    if (retry) retry.addEventListener('click', function () { global.location.reload(); });
   }
 
   ESH.app = { renderChrome: renderChrome };

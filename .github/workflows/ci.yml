@@ -1,0 +1,125 @@
+name: CI
+
+# Both suites assert things that fail SILENTLY in the app: a dropped database
+# column, a write that never reaches the server, a permission that is enforced
+# in the browser but not on the server. None of it shows up as an error at
+# runtime — the request succeeds and the value is simply gone on the next read.
+# Running them on every change is the only thing that catches that class.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# A second push to the same PR makes the first run irrelevant.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  frontend:
+    name: Frontend (jsdom)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      # jsdom is the only frontend dependency and is test-only: the app itself
+      # has no build step and no manifest, so there is nothing to cache or lock.
+      - name: Install the test dependency
+        run: npm install jsdom --no-save
+
+      # Demo mode: walks every route as each role and asserts on rendered
+      # output and the permission rules.
+      - name: Route and permission suite
+        run: node tests/smoke.mjs
+
+      # API mode: the boot path against a controlled /api, including the
+      # unreachable-server case.
+      - name: API-mode boot suite
+        run: node tests/api-mode.mjs
+
+  server:
+    name: Server (node:test)
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 22.5 is the minimum server/README.md documents — it is where
+        # node:sqlite arrived, and the reason there is no native module to
+        # compile and no database service to stand up. Testing it keeps that
+        # claim honest rather than aspirational; the second leg catches
+        # breakage on current Node.
+        node: ['22.5', '24']
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+
+      - name: Install
+        run: npm ci
+        working-directory: server
+
+      # These assert what an ATTACKER cannot do, against the real HTTP API with
+      # real cookies. B2 is never contacted: the presign path is covered by
+      # asserting requests are refused BEFORE any signing happens, and the tests
+      # needing real Backblaze credentials skip unless B2_KEY_ID is set.
+      - name: Authorisation and API suite
+        run: npm test
+        working-directory: server
+
+  policy:
+    name: Shared policy is genuinely shared
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      # shared/policy.js is loaded by the browser as a classic script AND by the
+      # server via require(). It is easy to break one without noticing, because
+      # each side only exercises its own loader. This checks both.
+      - name: The policy module loads under both loaders
+        run: |
+          node -e "
+            const p = require('./shared/policy.js');
+            const need = ['can','visibleReports','visibleComments','projectUser',
+                          'allowedTransitions','canTransition','validateUpload'];
+            for (const f of need) {
+              if (typeof p[f] !== 'function') throw new Error('missing export: ' + f);
+            }
+            if (typeof p.MIN_PASSWORD_LENGTH !== 'number') throw new Error('MIN_PASSWORD_LENGTH missing');
+            // A signed-out visitor must never be able to read a report.
+            if (p.can('report:read', { id: 'r', ownerId: 'u', status: 'published' }, null)) {
+              throw new Error('an unauthenticated actor was granted report:read');
+            }
+            console.log('policy.js: ' + need.length + ' exports present, default-deny holds');
+          "
+
+      - name: The browser's global-script form still parses
+        run: |
+          node -e "
+            const fs = require('fs'), vm = require('vm');
+            const src = fs.readFileSync('shared/policy.js', 'utf8');
+            const sandbox = { window: {} };
+            sandbox.self = sandbox.window;
+            vm.createContext(sandbox);
+            vm.runInContext(src, sandbox, { filename: 'shared/policy.js' });
+            if (!sandbox.window.ESHPolicy || typeof sandbox.window.ESHPolicy.can !== 'function') {
+              throw new Error('window.ESHPolicy.can was not defined — the browser build would break');
+            }
+            console.log('policy.js: attaches window.ESHPolicy under a plain script load');
+          "
