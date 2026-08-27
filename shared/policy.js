@@ -115,6 +115,17 @@
     return !!(report && STATUSES[report.status] && STATUSES[report.status].released);
   }
 
+  /* THE group-visibility predicate — decided in exactly one place so the
+     library, /bootstrap and report:read can never disagree. A report reaches
+     the signed-in group if it is a shared weekly, or any other type that the
+     supervisor has released. Everything downstream reads from this, never from
+     isReleased directly, so a private weekly cannot leak through a filter. */
+  function isGroupVisible(report) {
+    if (!report) return false;
+    if (isWeekly(report)) return report.visibility === 'shared';
+    return isReleased(report);
+  }
+
   function isOwner(actor, resource) {
     if (!actor || !resource) return false;
     if (resource.ownerId) return resource.ownerId === actor.id;   /* report */
@@ -142,7 +153,7 @@
         if (!resource) return false;
         if (sup) return true;                            /* supervisor sees all states */
         if (!intern) return false;                       /* no session ⇒ no records */
-        return owner || isReleased(resource);            /* own work, or released work */
+        return owner || isGroupVisible(resource);        /* own work, or group-visible work */
 
       case 'report:readAny':                             /* the dashboard's "see everything" */
         return sup;
@@ -155,9 +166,17 @@
         if (!resource) return false;
         if (sup) return true;                            /* supervisor may correct metadata */
         if (!intern || !owner) return false;
+        if (isWeekly(resource)) return true;             /* weeklies never lock */
         var st = STATUSES[resource.status];
         return !!(st && st.internEditable);
       }
+
+      /* Visibility is the STUDENT'S switch, changeable anytime with no
+         supervisor gate, and it applies to weeklies only — a formal report's
+         group visibility stays tied to `released`. Peers may not change it. */
+      case 'report:setVisibility':
+        if (!resource || !isWeekly(resource)) return false;
+        return sup || (intern && owner);
 
       case 'report:delete':                              /* hard delete is supervisor-only */
         return sup;
@@ -268,7 +287,7 @@
     var all = allReports || [];
     if (actor && actor.role === 'supervisor') return all.slice();
     if (actor && actor.role === 'intern') {
-      return all.filter(function (r) { return r.ownerId === actor.id || isReleased(r); });
+      return all.filter(function (r) { return r.ownerId === actor.id || isGroupVisible(r); });
     }
     return [];
   }
@@ -343,6 +362,7 @@
 
     isReleased: isReleased,
     isWeekly: isWeekly,
+    isGroupVisible: isGroupVisible,
     isOwner: isOwner,
     can: can,
     allowedTransitions: allowedTransitions,

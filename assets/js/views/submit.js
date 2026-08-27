@@ -59,6 +59,8 @@
     var freeCoAuthors = (r.coAuthors || []).filter(function (c) { return !c.userId; })
       .map(function (c) { return c.name; }).join(', ');
     var st = store.STATUSES[r.status];
+    var weekly = r.reportType === store.WEEKLY_TYPE;
+    var vis = r.visibility || 'private';
 
     ctx.el.innerHTML =
     '<div class="wrap wrap--880">' +
@@ -108,6 +110,17 @@
               store.CAMPAIGNS.map(function (c) { return '<option value="' + esc(c) + '"></option>'; }).join('') +
             '</datalist>' +
             '<p class="field__hint">Optional. Groups related work in the library.</p></div>' +
+          /* Weekly-only. Rendered always so the type-change listener can reveal
+             it without a re-render; hidden until the type is a weekly. */
+          '<div class="field" id="visibilityField"' + (weekly ? '' : ' hidden') + '>' +
+            '<span class="field__label">Who can see this weekly</span>' +
+            '<label class="checkline"><input type="radio" name="visibility" value="private"' +
+              (vis === 'private' ? ' checked' : '') + '>' +
+              '<span>Private — only you and Prof. Foing</span></label>' +
+            '<label class="checkline"><input type="radio" name="visibility" value="shared"' +
+              (vis === 'shared' ? ' checked' : '') + '>' +
+              '<span>Share with the group — everyone signed in can read it</span></label>' +
+            '<p class="field__hint">You can change this anytime, before or after submitting.</p></div>' +
         '</fieldset>' +
 
         '<fieldset><legend>Authorship</legend>' +
@@ -201,6 +214,13 @@
       document.getElementById('suppRows').insertAdjacentHTML('beforeend', suppRow({ label: '', url: '' }, suppIdx++));
     });
 
+    /* The visibility control belongs to weeklies only; reveal it live when the
+       type changes, without re-rendering the form. */
+    var visField = document.getElementById('visibilityField');
+    f.elements.reportType.addEventListener('change', function () {
+      visField.hidden = f.elements.reportType.value !== store.WEEKLY_TYPE;
+    });
+
     f.querySelectorAll('button[type=submit]').forEach(function (b) {
       b.addEventListener('click', function () { intent = b.value; });
     });
@@ -248,12 +268,18 @@
         supplementary: supplementary,
         dataAvailability: f.elements.dataAvailability.value.trim()
       };
+      /* Visibility is a weekly-only field, and it is NOT patchable — it rides
+         the create body on a new weekly, and goes through its own endpoint when
+         an existing weekly's setting is changed. */
+      var weekly = f.elements.reportType.value === store.WEEKLY_TYPE;
+      var visibility = weekly && f.elements.visibility ? f.elements.visibility.value : null;
+
       /* ---------------- Save, then upload to B2 ----------------
          The record is saved FIRST so the file has a report to belong to. The
          server keys every object under its report id and will not sign a PUT
          for a report you cannot edit, so there is no such thing as an orphan
          upload floating free of a permission check. */
-      saveViaApi(patch, r, isEdit, intent, pendingFile, f);
+      saveViaApi(patch, r, isEdit, intent, pendingFile, f, weekly, visibility);
     });
   }
 
@@ -270,7 +296,7 @@
      Every step is refused server-side if the policy says no, so a tampered
      page can at worst make requests that get rejected.
      ========================================================================== */
-  function saveViaApi(patch, existing, isEdit, intent, pendingFile, formEl) {
+  function saveViaApi(patch, existing, isEdit, intent, pendingFile, formEl, weekly, visibility) {
     var api = ESH.api;
     var buttons = [].slice.call(formEl.querySelectorAll('button[type=submit]'));
     var progress = document.getElementById('uploadProgress');
@@ -290,11 +316,23 @@
 
     busy(true, 'Saving record…');
 
+    /* A new weekly carries its visibility in the create body (accepted at
+       creation). A metadata edit cannot set it — the PATCH whitelist excludes
+       it — so a changed setting on an existing weekly goes through the
+       dedicated endpoint in the next step. */
+    var createBody = (!isEdit && weekly && visibility)
+      ? Object.assign({}, patch, { visibility: visibility })
+      : patch;
+
     var saved = isEdit
       ? api.reports.update(existing.id, patch).then(function (d) { return d.report; })
-      : api.reports.create(patch).then(function (d) { return d.report; });
+      : api.reports.create(createBody).then(function (d) { return d.report; });
 
     saved.then(function (rec) {
+      if (!(isEdit && weekly && visibility && visibility !== existing.visibility)) return rec;
+      busy(true, 'Updating visibility…');
+      return api.reports.visibility(rec.id, visibility).then(function (d) { return d.report || rec; });
+    }).then(function (rec) {
       if (!pendingFile) return rec;
       busy(true, 'Uploading ' + pendingFile.name + '… 0%');
       return api.uploadFile(rec.id, pendingFile, function (fraction) {

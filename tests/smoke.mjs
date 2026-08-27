@@ -116,6 +116,10 @@ mkReport({ id: 'r_revis_a', ownerId: 'u_a', title: 'Revisions Requested A',
            status: 'revisions', submittedAt: daysAgo(9) });
 mkReport({ id: 'r_xss', ownerId: 'u_a', title: '<img src=x onerror=alert(1)>XSSTITLE',
            status: 'published' });
+mkReport({ id: 'w_shared_a', ownerId: 'u_a', title: 'SHARED-WEEKLY-MARKER Week 5',
+           reportType: 'Weekly report', visibility: 'shared', status: 'submitted', submittedAt: daysAgo(3) });
+mkReport({ id: 'w_priv_a', ownerId: 'u_a', title: 'PRIVATE-WEEKLY-MARKER Week 6',
+           reportType: 'Weekly report', visibility: 'private', status: 'submitted', submittedAt: daysAgo(2) });
 
 /* ---------------- harness ---------------- */
 
@@ -403,6 +407,52 @@ goto('#/dashboard');
 ok('a co-supervisor reaches the dashboard', /dashboard/i.test(text()));
 ok('and sees internal notes too',
   ESH.auth.can('user:readInternalNotes', ESH.store.userById('u_a')));
+
+/* ================= WEEKLY VISIBILITY (Phase 2) ================= */
+section('Weekly reports — visibility');
+
+/* A peer: the shared weekly reaches them, the private one is structurally
+   absent — from the library and from a direct open. */
+await signInAs('b@test.local');
+goto('#/library');
+const libAsPeer = text();
+ok('a shared weekly reaches a peer in the library', /SHARED-WEEKLY-MARKER/.test(libAsPeer));
+ok('a private weekly never reaches a peer', !/PRIVATE-WEEKLY-MARKER/.test(libAsPeer));
+ok('Weekly report is a library type filter option',
+  /Weekly report/.test(window.document.getElementById('libFilters').innerHTML));
+
+goto('#/report/w_priv_a');
+ok('a peer cannot open a private weekly', !/PRIVATE-WEEKLY-MARKER/.test(text()),
+  text().slice(0, 90));
+goto('#/report/w_shared_a');
+ok('a peer can open a shared weekly', /SHARED-WEEKLY-MARKER/.test(text()));
+ok('a peer sees no visibility toggle on someone else\'s weekly',
+  !window.document.getElementById('visToggle'));
+
+/* The author: badge, toggle, and a real flip that persists to the server. */
+await signInAs('a@test.local');
+goto('#/report/w_priv_a');
+ok('the author sees a Private badge on their weekly', /Private/.test(text()));
+const toggle = window.document.getElementById('visToggle');
+ok('the author gets a visibility toggle', !!toggle);
+
+if (toggle) {
+  toggle.checked = true;
+  toggle.dispatchEvent(new window.Event('change'));
+  ok('flipping to shared persists to the server', await waitFor(async () => {
+    const j = await (await window.fetch('/api/reports/w_priv_a')).json();
+    return j.report && j.report.visibility === 'shared';
+  }, 3000));
+}
+
+/* Editability: a weekly stays editable for its author even when submitted. */
+goto('#/report/w_shared_a');
+ok('the author can edit a submitted weekly', /Edit this record/.test(html()));
+goto('#/report/w_shared_a/edit');
+ok('the weekly edit form opens', !!window.document.getElementById('repForm'));
+ok('the edit form shows the visibility control for a weekly',
+  !!window.document.getElementById('visibilityField') &&
+  !window.document.getElementById('visibilityField').hidden);
 
 /* ================= SIGNING OUT ================= */
 section('Signing out');

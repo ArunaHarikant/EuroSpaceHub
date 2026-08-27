@@ -116,11 +116,21 @@
         '<span class="meta">Featured records appear first for everyone in the group.</span></span></label>';
     }
 
+    /* Weekly visibility — the student's switch. Shown to whoever may set it
+       (the author, and the supervisor). Formal reports do not use the field. */
+    if (store.isWeekly(r) && auth.can('report:setVisibility', r, viewer)) {
+      body += '<hr><label class="checkline"><input type="checkbox" id="visToggle"' + (r.visibility === 'shared' ? ' checked' : '') + '>' +
+        '<span><strong>Share with the group</strong><br>' +
+        '<span class="meta">When off, this weekly is visible only to you and Prof. Foing.</span></span></label>';
+    }
+
     if (canEdit) {
       body += '<hr><a class="btn btn--block" href="#/report/' + esc(r.id) + '/edit">Edit this record</a>';
       if (!auth.isSupervisor()) {
-        body += '<p class="field__hint">You can edit until the supervisor opens the record for review, ' +
-          'and again if revisions are requested.</p>';
+        body += store.isWeekly(r)
+          ? '<p class="field__hint">Weekly reports stay editable at any time, before or after review.</p>'
+          : '<p class="field__hint">You can edit until the supervisor opens the record for review, ' +
+            'and again if revisions are requested.</p>';
       }
     } else if (viewer && r.ownerId === viewer.id) {
       body += '<hr>' + ui.notice('locked', 'Editing is locked',
@@ -191,6 +201,12 @@
         '<span class="badge">' + esc(r.reportType) + '</span>' +
         (r.featured ? ui.featuredBadge() : '') +
         (isPrivileged ? ui.statusBadge(r.status) : '') +
+        /* Weeklies carry a visibility badge; formal reports do not use the field.
+           Text carries the meaning, so colour is never the only cue. */
+        (store.isWeekly(r)
+          ? '<span class="badge badge--' + (r.visibility === 'shared' ? 'approved' : 'draft') + '">' +
+            (r.visibility === 'shared' ? 'Shared with group' : 'Private') + '</span>'
+          : '') +
       '</div>' +
 
       '<h1>' + esc(r.title) + '</h1>' +
@@ -368,6 +384,18 @@
            setFeatured() adds none locally. */
         store.setFeatured(r.id, feat.checked);
         ui.toast(feat.checked ? 'Record featured in the library.' : 'Record removed from featured.', 'good');
+        reRender();
+      });
+    }
+
+    /* --- visibility toggle (weeklies) --- */
+    var vis = document.getElementById('visToggle');
+    if (vis) {
+      vis.addEventListener('change', function () {
+        if (!auth.can('report:setVisibility', r, viewer)) { vis.checked = r.visibility === 'shared'; return; }
+        var next = vis.checked ? 'shared' : 'private';
+        store.setVisibility(r.id, next);
+        ui.toast(next === 'shared' ? 'Shared with the group.' : 'Made private.', 'good');
         reRender();
       });
     }

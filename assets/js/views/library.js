@@ -2,12 +2,12 @@
    views/library.js — the shared report library. MEMBERS ONLY.
 
    ACCESS: route-guarded to authenticated users and re-checked here through
-   auth.can('library:view'). The listing is built from store.releasedReports()
-   — the Approved + Published set the supervisor has cleared for sharing — and
-   NOT from auth.visibleReports(), so an unreleased record cannot reach this
-   page through a permission bug: it was never in the result set. A member's
-   own drafts live on their profile; the supervisor's all-states view is the
-   dashboard.
+   auth.can('library:view'). The listing is built from store.groupVisibleReports()
+   — shared weeklies plus the Approved + Published formal set — and NOT from
+   auth.visibleReports(), so a private weekly or an unreleased record cannot
+   reach this page through a permission bug: it was never in the result set. A
+   member's own private work lives on their profile; the supervisor's all-states
+   view is the dashboard.
    ========================================================================== */
 (function (global) {
   'use strict';
@@ -48,7 +48,7 @@
   function render(ctx) {
     if (!auth.can('library:view', null, auth.user())) { router.navigate('#/signin', true); return; }
 
-    var all = store.releasedReports();
+    var all = store.groupVisibleReports();
 
     var f = {
       area:     ctx.query.area     || 'all',

@@ -198,6 +198,34 @@ router.post('/reports/:id/featured', requireAuth, (req, res) => {
   res.json({ report: projectReport(updated, req.actor) });
 });
 
+/* The student's visibility switch — private ↔ shared, no supervisor gate, and
+   its own gated route rather than a metadata edit. A 404 for a report the
+   caller cannot even read means a peer learns nothing about a private weekly. */
+router.post('/reports/:id/visibility', requireAuth, (req, res) => {
+  const report = db.reportById(req.params.id);
+  if (!report || !policy.can('report:read', report, req.actor)) {
+    return res.status(404).json({ error: 'Report not found.' });
+  }
+  if (!policy.can('report:setVisibility', report, req.actor)) {
+    return res.status(403).json({ error: 'Not permitted.' });
+  }
+  const visibility = (req.body || {}).visibility;
+  if (!policy.VISIBILITIES.includes(visibility)) {
+    return res.status(400).json({ error: 'Unknown visibility.' });
+  }
+  if (visibility === report.visibility) {
+    return res.json({ report: projectReport(report, req.actor) });   /* no-op, no history noise */
+  }
+  const updated = db.updateReport(report.id, {
+    visibility,
+    history: (report.history || []).concat([{
+      at: db.nowISO(), by: req.actor.id, from: report.status, to: report.status,
+      note: visibility === 'shared' ? 'Shared with the group.' : 'Made private.'
+    }])
+  });
+  res.json({ report: projectReport(updated, req.actor) });
+});
+
 router.post('/reports/:id/comments', requireAuth, (req, res) => {
   const report = db.reportById(req.params.id);
   if (!report || !policy.can('report:read', report, req.actor)) {
