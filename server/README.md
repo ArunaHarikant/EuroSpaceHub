@@ -36,7 +36,7 @@ npm run seed              # creates the supervisor account, prints its password 
 npm start                 # http://localhost:3000
 ```
 
-Node 22.5+ is required — the database uses the built-in `node:sqlite`, so there is no
+Node 22.13+ is required — the database uses the built-in `node:sqlite`, so there is no
 native module to compile. Passwords use `node:crypto` scrypt for the same reason.
 
 `GET /api/health` reports whether B2 is actually reachable with the configured credentials.

@@ -50,8 +50,9 @@ session and no access control, so there is nothing to show.
 
 ## Running it
 
-Node 22.5+ — the database uses the built-in `node:sqlite`, so there is no native
-module to compile and no database service to stand up.
+Node 22.13+ — the database uses the built-in `node:sqlite`, so there is no native
+module to compile and no database service to stand up. (The module arrived in
+22.5 but behind `--experimental-sqlite`; 22.13 is where it works unflagged.)
 
 ```bash
 cd server

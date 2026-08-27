@@ -58,12 +58,12 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # 22.5 is the minimum server/README.md documents — it is where
-        # node:sqlite arrived, and the reason there is no native module to
-        # compile and no database service to stand up. Testing it keeps that
-        # claim honest rather than aspirational; the second leg catches
-        # breakage on current Node.
-        node: ['22.5', '24']
+        # 22.13 is the minimum server/README.md documents. node:sqlite arrived
+        # in 22.5 but behind --experimental-sqlite; the flag was only dropped in
+        # 22.13, so 22.5 cannot run this server unflagged. This leg is what
+        # caught that — the docs had claimed 22.5 since the backend landed.
+        # The second leg catches breakage on current Node.
+        node: ['22.13', '24']
     steps:
       - uses: actions/checkout@v4
 

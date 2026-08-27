@@ -1,5 +1,9 @@
 /* ==========================================================================
-   db.js — SQLite via node:sqlite (built into Node 22.5+, no native build).
+   db.js — SQLite via node:sqlite (built into Node 22.13+, no native build).
+
+   22.13 rather than 22.5: the module landed in 22.5 but behind
+   --experimental-sqlite, and the flag was only dropped in 22.13. On anything
+   older this require() throws ERR_UNKNOWN_BUILTIN_MODULE.
 
    The server is authoritative for users, sessions and reports. That is not
    architectural taste: the policy gate can only mean something if the actor

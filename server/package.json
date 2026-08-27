@@ -5,7 +5,7 @@
   "description": "Backend for the Lunar & Mars Research Hub: sessions, reports and Backblaze B2 file storage.",
   "main": "index.js",
   "engines": {
-    "node": ">=22.5.0"
+    "node": ">=22.13.0"
   },
   "scripts": {
     "start": "node index.js",
