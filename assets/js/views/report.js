@@ -246,7 +246,11 @@
               : '') +
           '</section>' +
 
-          (isPrivileged ? commentsPanel(r, viewer) : '') +
+          /* The thread shows for anyone who can read the record: author and
+             supervisor always, and any member on a group-visible report, who
+             may now take part. Internal notes are stripped by visibleComments
+             for non-supervisors. */
+          commentsPanel(r, viewer) +
         '</div>' +
 
         '<div>' +
@@ -274,7 +278,10 @@
 
     ui.bindFileControl(ctx.el);
     document.getElementById('citeBtn').addEventListener('click', function () { openCiteModal(r); });
-    if (isPrivileged) wire(r, viewer, ctx);
+    /* Always wire: the comment thread is interactive for any member now, and
+       every privileged-only control inside wire() is guarded by its element's
+       presence, so a peer simply binds the comment form and nothing else. */
+    wire(r, viewer, ctx);
   }
 
   /* Cite modal — pick a format, copy or download. The citation text is set as a

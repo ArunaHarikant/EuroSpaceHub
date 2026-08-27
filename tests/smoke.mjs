@@ -117,7 +117,11 @@ mkReport({ id: 'r_revis_a', ownerId: 'u_a', title: 'Revisions Requested A',
 mkReport({ id: 'r_xss', ownerId: 'u_a', title: '<img src=x onerror=alert(1)>XSSTITLE',
            status: 'published' });
 mkReport({ id: 'w_shared_a', ownerId: 'u_a', title: 'SHARED-WEEKLY-MARKER Week 5',
-           reportType: 'Weekly report', visibility: 'shared', status: 'submitted', submittedAt: daysAgo(3) });
+           reportType: 'Weekly report', visibility: 'shared', status: 'submitted', submittedAt: daysAgo(3),
+           comments: [{ id: 'wc_sup', authorId: 'u_sup', at: daysAgo(2),
+                        body: 'SUPERVISOR-WEEKLY-COMMENT good progress.', parentId: null, internal: false }] });
+mkReport({ id: 'w_priv2_a', ownerId: 'u_a', title: 'PRIVATE2-WEEKLY-MARKER Week 8',
+           reportType: 'Weekly report', visibility: 'private', status: 'submitted', submittedAt: daysAgo(1) });
 mkReport({ id: 'w_priv_a', ownerId: 'u_a', title: 'PRIVATE-WEEKLY-MARKER Week 6',
            reportType: 'Weekly report', visibility: 'private', status: 'submitted', submittedAt: daysAgo(2) });
 mkReport({ id: 'w_queue', ownerId: 'u_b', title: 'QUEUE-WEEKLY-MARKER Week 7',
@@ -456,6 +460,30 @@ ok('the edit form shows the visibility control for a weekly',
   !!window.document.getElementById('visibilityField') &&
   !window.document.getElementById('visibilityField').hidden);
 
+/* ================= WEEKLY GROUP COMMENTS (Phase 4) ================= */
+section('Weekly reports — group comments');
+
+await signInAs('b@test.local');   /* a peer, not the author */
+goto('#/report/w_shared_a');
+ok('a peer sees the comment thread on a shared weekly', /SUPERVISOR-WEEKLY-COMMENT/.test(text()));
+ok('the professor comment carries a Supervisor badge', /badge--role/.test(html()));
+const cForm = window.document.getElementById('commentForm');
+ok('a peer gets a comment box on a shared weekly', !!cForm);
+if (cForm) {
+  cForm.elements.body.value = 'PEER-COMMENT-MARKER from a colleague';
+  cForm.dispatchEvent(new window.Event('submit', { cancelable: true, bubbles: true }));
+  ok('the peer comment persists to the server', await waitFor(async () => {
+    const j = await (await window.fetch('/api/reports/w_shared_a')).json();
+    return JSON.stringify(j.report.comments || []).includes('PEER-COMMENT-MARKER');
+  }, 3000));
+}
+
+/* The box does not appear on a report the viewer cannot reach (a private weekly
+   of someone else) — the visibility rule denies the page before any comment UI. */
+goto('#/report/w_priv2_a');
+ok('a peer cannot reach a private weekly', !/PRIVATE2-WEEKLY-MARKER/.test(text()));
+ok('and so gets no comment box there', !window.document.getElementById('commentForm'));
+
 /* ================= WEEKLY REVIEW QUEUE (Phase 3) ================= */
 section('Weekly reports — review queue');
 
@@ -502,20 +530,16 @@ ok('Return to queue clears the stamp on the server', await waitFor(async () => {
 goto('#/dashboard?bucket=action');
 ok('the returned weekly is back in the queue', /QUEUE-WEEKLY-MARKER/.test(text()));
 
-/* Editing a reviewed weekly keeps it reviewed and does not re-queue it. */
-{
-  const s = ESH.auth.user();
-  ESH.store.markReviewed('w_queue', s.id);
-  await waitFor(async () => {
-    const j = await (await window.fetch('/api/reports/w_queue')).json();
-    return j.report && j.report.reviewedAt;
-  }, 3000);
-  await ESH.api.reports.update('w_queue', { title: 'QUEUE-WEEKLY-MARKER Week 7 (edited)' });
-  const j = await (await window.fetch('/api/reports/w_queue')).json();
-  ok('an edit after review keeps the review stamp', !!j.report.reviewedAt);
-  ok('the edit history says it was edited after review',
-    (j.report.history || []).some((h) => h.note === 'Weekly edited after review.'));
-}
+/* Editing a reviewed weekly keeps it reviewed and does not re-queue it. Awaited
+   throughout so it does not race the fire-and-forget writes above. */
+await ESH.api.reports.markReviewed('w_queue');
+const revd = await (await window.fetch('/api/reports/w_queue')).json();
+ok('the weekly is reviewed before the edit', !!revd.report.reviewedAt);
+await ESH.api.reports.update('w_queue', { title: 'QUEUE-WEEKLY-MARKER Week 7 (edited)' });
+const afterEdit = await (await window.fetch('/api/reports/w_queue')).json();
+ok('an edit after review keeps the review stamp', !!afterEdit.report.reviewedAt);
+ok('the edit history says it was edited after review',
+  (afterEdit.report.history || []).some((h) => h.note === 'Weekly edited after review.'));
 
 /* ================= SIGNING OUT ================= */
 section('Signing out');

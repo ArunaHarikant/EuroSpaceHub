@@ -227,7 +227,8 @@
       case 'comment:write':
         if (!resource) return false;
         if (sup) return true;
-        return intern && owner;                          /* interns may reply on own reports */
+        if (intern && owner) return true;                /* your own report, any state */
+        return intern && isGroupVisible(resource);       /* any member on group-visible work */
 
       case 'comment:writeInternal':
         return sup;

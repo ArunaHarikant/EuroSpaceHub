@@ -880,3 +880,83 @@ test('editing a reviewed weekly keeps it reviewed, does not re-queue, and notes 
   assert.ok((after.history || []).some((h) => h.note === 'Weekly edited after review.'),
     'the history must record that it was edited after review');
 });
+
+/* ================= weekly reports: Phase 4 (group comments) ====================
+   Any signed-in member may comment on a group-visible report; a private one
+   stays author + professor only, which falls out of the visibility rule rather
+   than a second check. Internal notes never reach a non-supervisor. */
+
+test('a peer can comment on a shared weekly', async () => {
+  const a = await login('a@test.local', 'u_a');
+  const w = await makeWeekly(a.cookie, { visibility: 'shared' });
+
+  const peer = await login('peer@test.local', 'u_peer');
+  const res = await call('POST', '/api/reports/' + w.id + '/comments', {
+    cookie: peer.cookie, body: { body: 'A peer comment on a shared weekly.' }
+  });
+  assert.equal(res.status, 201);
+  assert.ok((db.reportById(w.id).comments || []).some((c) => c.authorId === 'u_peer'),
+    'the peer comment must be recorded');
+});
+
+test('a peer cannot comment on (or even reach) a private weekly', async () => {
+  const a = await login('a@test.local', 'u_a');
+  const w = await makeWeekly(a.cookie, { visibility: 'private' });
+
+  const peer = await login('peer@test.local', 'u_peer');
+  const res = await call('POST', '/api/reports/' + w.id + '/comments', {
+    cookie: peer.cookie, body: { body: 'Should be refused.' }
+  });
+  assert.equal(res.status, 404, 'the report is not readable, so commenting 404s before any write');
+  assert.equal((db.reportById(w.id).comments || []).length, 0);
+});
+
+test('a peer can comment on a released formal report', async () => {
+  const a = await login('a@test.local', 'u_a');
+  const { report } = await (await call('POST', '/api/reports', {
+    cookie: a.cookie, body: { title: 'Formal for comment', abstract: 'x', reportType: 'Research paper' }
+  })).json();
+  /* Release it: the author submits (draft→submitted is the intern's move),
+     then the supervisor approves. */
+  const s = await login('sup@test.local', 'u_sup');
+  await call('POST', '/api/reports/' + report.id + '/status', { cookie: a.cookie, body: { status: 'submitted' } });
+  await call('POST', '/api/reports/' + report.id + '/status', { cookie: s.cookie, body: { status: 'approved' } });
+  assert.equal(db.reportById(report.id).status, 'approved');
+
+  const peer = await login('peer@test.local', 'u_peer');
+  const res = await call('POST', '/api/reports/' + report.id + '/comments', {
+    cookie: peer.cookie, body: { body: 'Peer comment on a released paper.' }
+  });
+  assert.equal(res.status, 201);
+});
+
+test('an internal note stays absent from a peer\'s view of a shared weekly', async () => {
+  const a = await login('a@test.local', 'u_a');
+  const w = await makeWeekly(a.cookie, { visibility: 'shared' });
+  const s = await login('sup@test.local', 'u_sup');
+  await call('POST', '/api/reports/' + w.id + '/comments', {
+    cookie: s.cookie, body: { body: 'INTERNAL-MARKER note', internal: true }
+  });
+
+  const peer = await login('peer@test.local', 'u_peer');
+  const got = await (await call('GET', '/api/reports/' + w.id, { cookie: peer.cookie })).json();
+  assert.ok(!JSON.stringify(got.report.comments).includes('INTERNAL-MARKER'),
+    'an internal note must be absent from the peer payload, not merely hidden');
+});
+
+test('a peer cannot forge an internal note on a shared weekly', async () => {
+  const a = await login('a@test.local', 'u_a');
+  const w = await makeWeekly(a.cookie, { visibility: 'shared' });
+
+  const peer = await login('peer@test.local', 'u_peer');
+  const res = await call('POST', '/api/reports/' + w.id + '/comments', {
+    cookie: peer.cookie, body: { body: 'Trying to be internal', internal: true }
+  });
+  /* The comment may post, but it must not be internal. */
+  if (res.status === 201) {
+    const posted = (db.reportById(w.id).comments || []).find((c) => c.authorId === 'u_peer');
+    assert.ok(posted && !posted.internal, 'a non-supervisor cannot create an internal note');
+  } else {
+    assert.equal(res.status, 403);
+  }
+});
