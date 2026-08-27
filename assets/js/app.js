@@ -192,7 +192,7 @@
       renderChrome();
     });
 
-    /* API mode does one /bootstrap round trip before the first render, so the
+    /* Boot does one /bootstrap round trip before the first render, so the
        first paint shows the server's truth rather than a guess. */
     store.hydrate().then(function () {
       auth.restore();

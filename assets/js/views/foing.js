@@ -65,12 +65,12 @@
           'researcher profiles are available only to interns currently working with ' +
           'Prof. Foing and to Prof. Foing himself. Nothing on this page is a public archive, ' +
           'and no submitted work is published outside the group.</p>' +
-        '<p class="lede mi-auto">Already placed with Prof. Foing? Sign in, or ' +
-          'create your researcher account. This hub is not an application route — placements are ' +
-          'arranged separately.</p>' +
+        '<p class="lede mi-auto">Already placed with Prof. Foing? Sign in with the account he ' +
+          'issued you. This hub is not an application route — placements are arranged separately, ' +
+          'and accounts are created by the supervisor rather than self-registered.</p>' +
         '<div class="btn-row jc-center">' +
           '<a class="btn btn--primary" href="#/signin">Sign in</a>' +
-          '<a class="btn" href="#/register">Create a researcher account</a>' +
+          '<a class="btn" href="#/access">How access works</a>' +
         '</div>' +
       '</div>' +
     '</section>';

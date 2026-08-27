@@ -14,13 +14,10 @@
    │  session row and its own report row before it acts.                  │
    └──────────────────────────────────────────────────────────────────────┘
 
-   Two session modes:
-     API mode  (ESH_CONFIG.apiBase set) — the session is an httpOnly cookie the
-                page cannot read; `current` is whatever /api/auth/me returned.
-                Sign-in and sign-out are server round trips.
-     Demo mode (no apiBase) — the original localStorage stub, kept so the hub
-                still runs from file:// and so tests/smoke.mjs works offline.
-                Clearly labelled in the UI as a demonstration.
+   The session is an httpOnly cookie the page cannot read; `current` is only a
+   note of whoever the server last said we are. Sign-in and sign-out are server
+   round trips. Clearing `current` signs nobody out on its own — only the server
+   can end a session.
    ========================================================================== */
 (function (global) {
   'use strict';

@@ -598,7 +598,7 @@
         var r = store.reportById(id);
         if (!r) return;
         if (on && !auth.can('report:feature', r, viewer)) { skipped++; return; }
-        store.setFeatured(id, on, viewer.id);
+        store.setFeatured(id, on);
         done++;
       });
       selected = {};
@@ -664,7 +664,7 @@
         var id = cb.getAttribute('data-quickfeature');
         var r = store.reportById(id);
         if (!auth.can('report:feature', r, viewer)) { cb.checked = r.featured; return; }
-        store.setFeatured(id, cb.checked, viewer.id);
+        store.setFeatured(id, cb.checked);
         ui.toast(cb.checked ? 'Featured in the library.' : 'Removed from featured.', 'good');
       });
     });
