@@ -791,3 +791,92 @@ test('an author\'s own private weekly still reaches the supervisor', async () =>
   const direct = await call('GET', '/api/reports/' + w.id, { cookie: s.cookie });
   assert.equal(direct.status, 200, 'private hides from peers, never from the professor');
 });
+
+/* ================= weekly reports: Phase 3 (the professor's review queue) ======
+   Submitting a weekly queues it; Mark reviewed clears it; Return to queue puts
+   it back; visibility is untouched throughout; a private weekly is queued too;
+   an edit after review keeps it reviewed and does not re-queue. */
+
+/* A submitted weekly, owned by u_a, at a known visibility. */
+async function submittedWeekly(cookie, visibility) {
+  const w = await makeWeekly(cookie, { visibility: visibility || 'private' });
+  await call('POST', '/api/reports/' + w.id + '/status', {
+    cookie, body: { status: 'submitted', note: 'Submitted.' }
+  });
+  return db.reportById(w.id);
+}
+
+test('submitting a weekly puts it in the queue; reviewing clears it; unreview restores it', async () => {
+  const a = await login('a@test.local', 'u_a');
+  const s = await login('sup@test.local', 'u_sup');
+  const w = await submittedWeekly(a.cookie, 'private');
+  assert.ok(policy.needsReview(db.reportById(w.id)), 'a submitted weekly needs review');
+
+  const reviewed = await call('POST', '/api/reports/' + w.id + '/reviewed', { cookie: s.cookie });
+  assert.equal(reviewed.status, 200);
+  const afterReview = db.reportById(w.id);
+  assert.ok(afterReview.reviewedAt && afterReview.reviewedBy === 'u_sup', 'reviewedAt/By must be set');
+  assert.ok(!policy.needsReview(afterReview), 'a reviewed weekly leaves the queue');
+
+  const back = await call('POST', '/api/reports/' + w.id + '/unreview', { cookie: s.cookie });
+  assert.equal(back.status, 200);
+  const afterBack = db.reportById(w.id);
+  assert.equal(afterBack.reviewedAt, null);
+  assert.equal(afterBack.reviewedBy, null);
+  assert.ok(policy.needsReview(afterBack), 'un-reviewing returns it to the queue');
+});
+
+test('review leaves visibility untouched', async () => {
+  const a = await login('a@test.local', 'u_a');
+  const s = await login('sup@test.local', 'u_sup');
+  const w = await submittedWeekly(a.cookie, 'shared');
+
+  await call('POST', '/api/reports/' + w.id + '/reviewed', { cookie: s.cookie });
+  assert.equal(db.reportById(w.id).visibility, 'shared', 'reviewing must not change visibility');
+  await call('POST', '/api/reports/' + w.id + '/unreview', { cookie: s.cookie });
+  assert.equal(db.reportById(w.id).visibility, 'shared', 'un-reviewing must not change visibility');
+});
+
+test('a PRIVATE weekly is in the professor\'s queue', async () => {
+  const a = await login('a@test.local', 'u_a');
+  const w = await submittedWeekly(a.cookie, 'private');
+  assert.ok(policy.needsReview(db.reportById(w.id)),
+    'private hides from peers, but the professor reviews everything');
+});
+
+test('an intern cannot mark a weekly reviewed', async () => {
+  const a = await login('a@test.local', 'u_a');
+  const w = await submittedWeekly(a.cookie, 'private');
+  const res = await call('POST', '/api/reports/' + w.id + '/reviewed', { cookie: a.cookie });
+  assert.equal(res.status, 403);
+  assert.equal(db.reportById(w.id).reviewedAt, null, 'nothing may change on a refusal');
+});
+
+test('reviewing a FORMAL report is refused', async () => {
+  const a = await login('a@test.local', 'u_a');
+  const s = await login('sup@test.local', 'u_sup');
+  const { report } = await (await call('POST', '/api/reports', {
+    cookie: a.cookie, body: { title: 'Formal', abstract: 'x', reportType: 'Research paper' }
+  })).json();
+  const res = await call('POST', '/api/reports/' + report.id + '/reviewed', { cookie: s.cookie });
+  assert.equal(res.status, 403, 'the mark-reviewed act is for weeklies only');
+});
+
+test('editing a reviewed weekly keeps it reviewed, does not re-queue, and notes it', async () => {
+  const a = await login('a@test.local', 'u_a');
+  const s = await login('sup@test.local', 'u_sup');
+  const w = await submittedWeekly(a.cookie, 'private');
+  await call('POST', '/api/reports/' + w.id + '/reviewed', { cookie: s.cookie });
+  const reviewedAt = db.reportById(w.id).reviewedAt;
+
+  const edit = await call('PATCH', '/api/reports/' + w.id, {
+    cookie: a.cookie, body: { title: 'Week (edited after review)' }
+  });
+  assert.equal(edit.status, 200, 'the author may edit a reviewed weekly');
+  const after = db.reportById(w.id);
+  assert.equal(after.title, 'Week (edited after review)');
+  assert.equal(after.reviewedAt, reviewedAt, 'the review stamp is preserved');
+  assert.ok(!policy.needsReview(after), 'it must not re-enter the queue');
+  assert.ok((after.history || []).some((h) => h.note === 'Weekly edited after review.'),
+    'the history must record that it was edited after review');
+});

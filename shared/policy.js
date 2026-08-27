@@ -126,6 +126,14 @@
     return isReleased(report);
   }
 
+  /* A weekly needs the professor's review when it has been submitted and not
+     yet cleared. Keyed on reviewedAt, so an edit (which never touches it) does
+     not re-queue a reviewed weekly, and un-reviewing (which clears it) puts it
+     back. Private weeklies are included — the professor reviews everything. */
+  function needsReview(report) {
+    return isWeekly(report) && !!report.submittedAt && !report.reviewedAt;
+  }
+
   function isOwner(actor, resource) {
     if (!actor || !resource) return false;
     if (resource.ownerId) return resource.ownerId === actor.id;   /* report */
@@ -177,6 +185,11 @@
       case 'report:setVisibility':
         if (!resource || !isWeekly(resource)) return false;
         return sup || (intern && owner);
+
+      /* Marking a weekly reviewed, and reversing it, are the professor's — a
+         single reversible act, not a workflow transition. Weeklies only. */
+      case 'report:review':
+        return sup && !!resource && isWeekly(resource);
 
       case 'report:delete':                              /* hard delete is supervisor-only */
         return sup;
@@ -363,6 +376,7 @@
     isReleased: isReleased,
     isWeekly: isWeekly,
     isGroupVisible: isGroupVisible,
+    needsReview: needsReview,
     isOwner: isOwner,
     can: can,
     allowedTransitions: allowedTransitions,

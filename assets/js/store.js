@@ -127,6 +127,7 @@
   var isReleased = P.isReleased;
   var isWeekly = P.isWeekly;
   var isGroupVisible = P.isGroupVisible;
+  var needsReview = P.needsReview;
   function releasedReports() { return getState().reports.filter(isReleased); }
 
   /* What the signed-in group can see: shared weeklies + released formal reports.
@@ -268,6 +269,30 @@
     if (!r) return null;
     sync(global.ESH.api.reports.visibility(reportId, visibility), 'Updating visibility');
     r.visibility = visibility;
+    r.updatedAt = nowISO();
+    save();
+    return r;
+  }
+
+  /* The professor's reversible review act. Optimistic like the others; the
+     server writes the history entry, so none is added locally. */
+  function markReviewed(reportId, byUserId) {
+    var r = reportById(reportId);
+    if (!r) return null;
+    sync(global.ESH.api.reports.markReviewed(reportId), 'Marking reviewed');
+    r.reviewedAt = nowISO();
+    r.reviewedBy = byUserId || null;
+    r.updatedAt = nowISO();
+    save();
+    return r;
+  }
+
+  function unreview(reportId) {
+    var r = reportById(reportId);
+    if (!r) return null;
+    sync(global.ESH.api.reports.unreview(reportId), 'Returning to the queue');
+    r.reviewedAt = null;
+    r.reviewedBy = null;
     r.updatedAt = nowISO();
     save();
     return r;
@@ -416,11 +441,12 @@
     userById: userById, userByEmail: userByEmail,
     reports: reports, reportById: reportById, reportsByOwner: reportsByOwner,
     releasedReports: releasedReports, groupVisibleReports: groupVisibleReports,
-    isReleased: isReleased, isWeekly: isWeekly, isGroupVisible: isGroupVisible,
+    isReleased: isReleased, isWeekly: isWeekly, isGroupVisible: isGroupVisible, needsReview: needsReview,
     authorLine: authorLine,
 
     createUser: createUser, updateUser: updateUser, markNotificationsSeen: markNotificationsSeen,
     setFeatured: setFeatured, setVisibility: setVisibility, deleteReport: deleteReport, updateReport: updateReport,
+    markReviewed: markReviewed, unreview: unreview,
     setStatus: setStatus, addComment: addComment,
 
     issueTemporaryPassword: issueTemporaryPassword

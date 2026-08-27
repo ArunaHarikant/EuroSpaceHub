@@ -120,6 +120,8 @@ mkReport({ id: 'w_shared_a', ownerId: 'u_a', title: 'SHARED-WEEKLY-MARKER Week 5
            reportType: 'Weekly report', visibility: 'shared', status: 'submitted', submittedAt: daysAgo(3) });
 mkReport({ id: 'w_priv_a', ownerId: 'u_a', title: 'PRIVATE-WEEKLY-MARKER Week 6',
            reportType: 'Weekly report', visibility: 'private', status: 'submitted', submittedAt: daysAgo(2) });
+mkReport({ id: 'w_queue', ownerId: 'u_b', title: 'QUEUE-WEEKLY-MARKER Week 7',
+           reportType: 'Weekly report', visibility: 'private', status: 'submitted', submittedAt: daysAgo(1) });
 
 /* ---------------- harness ---------------- */
 
@@ -453,6 +455,67 @@ ok('the weekly edit form opens', !!window.document.getElementById('repForm'));
 ok('the edit form shows the visibility control for a weekly',
   !!window.document.getElementById('visibilityField') &&
   !window.document.getElementById('visibilityField').hidden);
+
+/* ================= WEEKLY REVIEW QUEUE (Phase 3) ================= */
+section('Weekly reports — review queue');
+
+await signInAs('sup@test.local');
+
+/* The professor is notified of a submitted weekly, from live state. */
+goto('#/inbox');
+ok('the professor is notified of a submitted weekly', /submitted a weekly report/i.test(text()));
+
+/* It sits in the needs-my-action queue. */
+goto('#/dashboard?bucket=action');
+ok('an un-reviewed weekly is in the needs-action queue', /QUEUE-WEEKLY-MARKER/.test(text()));
+
+const panelBtn = window.document.querySelector('[data-panel="w_queue"]');
+ok('the queued weekly has a Review control', !!panelBtn);
+if (panelBtn) panelBtn.click();
+const markBtn = window.document.querySelector('[data-markreviewed="w_queue"]');
+ok('an un-reviewed weekly offers Mark reviewed', !!markBtn);
+if (markBtn) markBtn.click();
+ok('Mark reviewed clears the review stamp on the server', await waitFor(async () => {
+  const j = await (await window.fetch('/api/reports/w_queue')).json();
+  return j.report && j.report.reviewedAt;
+}, 3000));
+
+/* And it leaves the queue. */
+goto('#/dashboard?bucket=action');
+ok('a reviewed weekly leaves the needs-action queue', !/QUEUE-WEEKLY-MARKER/.test(text()));
+
+/* Return to queue restores it. The review panel may already be open from the
+   earlier step (openPanel persists), so only click to open it if it is not. */
+goto('#/dashboard');
+if (!window.document.querySelector('[data-unreview="w_queue"]')) {
+  const panelBtn2 = window.document.querySelector('[data-panel="w_queue"]');
+  if (panelBtn2) panelBtn2.click();
+}
+const unBtn = window.document.querySelector('[data-unreview="w_queue"]');
+ok('a reviewed weekly offers Return to queue', !!unBtn);
+if (unBtn) unBtn.click();
+ok('Return to queue clears the stamp on the server', await waitFor(async () => {
+  const j = await (await window.fetch('/api/reports/w_queue')).json();
+  return j.report && !j.report.reviewedAt;
+}, 3000));
+
+goto('#/dashboard?bucket=action');
+ok('the returned weekly is back in the queue', /QUEUE-WEEKLY-MARKER/.test(text()));
+
+/* Editing a reviewed weekly keeps it reviewed and does not re-queue it. */
+{
+  const s = ESH.auth.user();
+  ESH.store.markReviewed('w_queue', s.id);
+  await waitFor(async () => {
+    const j = await (await window.fetch('/api/reports/w_queue')).json();
+    return j.report && j.report.reviewedAt;
+  }, 3000);
+  await ESH.api.reports.update('w_queue', { title: 'QUEUE-WEEKLY-MARKER Week 7 (edited)' });
+  const j = await (await window.fetch('/api/reports/w_queue')).json();
+  ok('an edit after review keeps the review stamp', !!j.report.reviewedAt);
+  ok('the edit history says it was edited after review',
+    (j.report.history || []).some((h) => h.note === 'Weekly edited after review.'));
+}
 
 /* ================= SIGNING OUT ================= */
 section('Signing out');

@@ -281,7 +281,7 @@ function insertReport(r) {
 
 const REPORT_PATCHABLE = ['title','missionArea','reportType','campaign','abstract','keywords','coAuthors',
                           'file','supplementary','dataAvailability','status','featured','visibility',
-                          'submittedAt','history','comments'];
+                          'reviewedAt','reviewedBy','submittedAt','history','comments'];
 const REPORT_JSON = new Set(['keywords','coAuthors','file','supplementary','history','comments']);
 
 function updateReport(id, patch) {

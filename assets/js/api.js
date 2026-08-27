@@ -113,6 +113,8 @@
     status:  function (id, to, n) { return post('/reports/' + encodeURIComponent(id) + '/status', { status: to, note: n || '' }); },
     feature: function (id, on)    { return post('/reports/' + encodeURIComponent(id) + '/featured', { featured: !!on }); },
     visibility: function (id, v)  { return post('/reports/' + encodeURIComponent(id) + '/visibility', { visibility: v }); },
+    markReviewed: function (id)   { return post('/reports/' + encodeURIComponent(id) + '/reviewed', {}); },
+    unreview: function (id)       { return post('/reports/' + encodeURIComponent(id) + '/unreview', {}); },
     comment: function (id, body, parentId, internal) {
       return post('/reports/' + encodeURIComponent(id) + '/comments',
                   { body: body, parentId: parentId || null, internal: !!internal });

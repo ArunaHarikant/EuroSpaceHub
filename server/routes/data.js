@@ -149,9 +149,13 @@ router.patch('/reports/:id', requireAuth, (req, res) => {
   const err = validate(patch, { partial: true });
   if (err) return res.status(400).json({ error: err });
 
+  /* A weekly stays editable after it is reviewed. The edit keeps reviewedAt
+     (readBody excludes it, so it is never touched here) — so it does not
+     re-enter the queue — and records a note that says plainly it happened. */
+  const editedAfterReview = policy.isWeekly(report) && !!report.reviewedAt;
   patch.history = (report.history || []).concat([{
     at: db.nowISO(), by: req.actor.id, from: report.status, to: report.status,
-    note: 'Record details updated.'
+    note: editedAfterReview ? 'Weekly edited after review.' : 'Record details updated.'
   }]);
 
   res.json({ report: projectReport(db.updateReport(report.id, patch), req.actor) });
@@ -221,6 +225,47 @@ router.post('/reports/:id/visibility', requireAuth, (req, res) => {
     history: (report.history || []).concat([{
       at: db.nowISO(), by: req.actor.id, from: report.status, to: report.status,
       note: visibility === 'shared' ? 'Shared with the group.' : 'Made private.'
+    }])
+  });
+  res.json({ report: projectReport(updated, req.actor) });
+});
+
+/* The professor's review is a single reversible act on a weekly, not a status
+   transition. Marking it reviewed clears it from the queue; un-reviewing puts
+   it back. Both audited in history, supervisor-only, weeklies only. */
+router.post('/reports/:id/reviewed', requireAuth, (req, res) => {
+  const report = db.reportById(req.params.id);
+  if (!report) return res.status(404).json({ error: 'Report not found.' });
+  if (!policy.can('report:review', report, req.actor)) {
+    return res.status(403).json({ error: 'Only a supervisor may review a weekly report.' });
+  }
+  if (report.reviewedAt) {
+    return res.json({ report: projectReport(report, req.actor) });   /* already reviewed — no-op */
+  }
+  const at = db.nowISO();
+  const updated = db.updateReport(report.id, {
+    reviewedAt: at, reviewedBy: req.actor.id,
+    history: (report.history || []).concat([{
+      at, by: req.actor.id, from: report.status, to: report.status, note: 'Marked reviewed.'
+    }])
+  });
+  res.json({ report: projectReport(updated, req.actor) });
+});
+
+router.post('/reports/:id/unreview', requireAuth, (req, res) => {
+  const report = db.reportById(req.params.id);
+  if (!report) return res.status(404).json({ error: 'Report not found.' });
+  if (!policy.can('report:review', report, req.actor)) {
+    return res.status(403).json({ error: 'Only a supervisor may review a weekly report.' });
+  }
+  if (!report.reviewedAt) {
+    return res.json({ report: projectReport(report, req.actor) });   /* already in the queue — no-op */
+  }
+  const updated = db.updateReport(report.id, {
+    reviewedAt: null, reviewedBy: null,
+    history: (report.history || []).concat([{
+      at: db.nowISO(), by: req.actor.id, from: report.status, to: report.status,
+      note: 'Returned to the review queue.'
     }])
   });
   res.json({ report: projectReport(updated, req.actor) });

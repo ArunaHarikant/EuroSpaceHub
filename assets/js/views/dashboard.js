@@ -242,9 +242,18 @@
 
   /* ---------------- report table ---------------- */
 
+  /* "Needs my action": formal reports awaiting a decision (submitted/review),
+     and weeklies awaiting review (needsReview). A reviewed weekly stays in the
+     'submitted' status but is NOT in the queue, so it is keyed on needsReview,
+     not status. */
+  function inActionQueue(r) {
+    return store.isWeekly(r) ? store.needsReview(r)
+                             : (r.status === 'submitted' || r.status === 'review');
+  }
+
   function matches(r, f) {
     if (f.status !== 'all' && r.status !== f.status) return false;
-    if (f.status === 'all' && f.bucket === 'action' && !(r.status === 'submitted' || r.status === 'review')) return false;
+    if (f.status === 'all' && f.bucket === 'action' && !inActionQueue(r)) return false;
     if (f.area !== 'all' && r.missionArea !== f.area) return false;
     if (f.type !== 'all' && r.reportType !== f.type) return false;
     if (f.intern !== 'all' && r.ownerId !== f.intern) return false;
@@ -337,6 +346,13 @@
             ? '<label class="checkline mt-12"><input type="checkbox" data-quickfeature="' + esc(r.id) + '"' +
               (r.featured ? ' checked' : '') + '><span>Featured in the report library</span></label>'
             : '') +
+          /* The professor's single review act — weeklies only. */
+          (store.isWeekly(r) && auth.can('report:review', r, viewer)
+            ? (r.reviewedAt
+                ? '<p class="mt-12 mb-6 meta">Reviewed ' + esc(ui.fmtDate(r.reviewedAt)) + '.</p>' +
+                  '<button class="btn btn--sm btn--ghost" type="button" data-unreview="' + esc(r.id) + '">Return to queue</button>'
+                : '<button class="btn btn--sm btn--primary" type="button" data-markreviewed="' + esc(r.id) + '">Mark reviewed</button>')
+            : '') +
           '<p class="mt-12 mb-0"><a class="btn btn--sm" href="#/report/' + esc(r.id) + '">Open full record</a></p>' +
         '</div>' +
       '</div>' +
@@ -347,13 +363,20 @@
      states that are waiting on the supervisor; emphasised past two weeks. The
      duration is always spelled out in text, so colour is never the only cue. */
   function queueAge(r) {
-    if (r.status !== 'submitted' && r.status !== 'review') return '';
+    if (!inActionQueue(r)) return '';
     var d = ui.daysSince(r.submittedAt || r.updatedAt);
     if (d === null) return '';
     var text = d === 0 ? 'in queue today' : 'waiting ' + d + ' day' + (d === 1 ? '' : 's');
     var stale = d >= 14;
     return '<div class="queueage' + (stale ? ' queueage--stale' : '') + '">' +
       (stale ? '<strong>' + text + '</strong>' : text) + '</div>';
+  }
+
+  /* A reviewed weekly is out of the queue; show when it was cleared instead of
+     a waiting age, so the two states are never confused. */
+  function reviewedMark(r) {
+    if (!store.isWeekly(r) || !r.reviewedAt) return '';
+    return '<div class="queueage">reviewed ' + esc(ui.fmtDate(r.reviewedAt)) + '</div>';
   }
 
   function reportTable(reports, interns, f, viewer) {
@@ -449,7 +472,7 @@
             (r.featured ? ' ' + ui.featuredBadge() : '') +
             ((r.comments || []).length ? ' <span class="meta">· ' + r.comments.length + ' comment' + (r.comments.length === 1 ? '' : 's') + '</span>' : '') + '</td>' +
           '<td class="nowrap">' + (owner ? '<a href="#/researcher/' + esc(owner.id) + '">' + esc(owner.fullName) + '</a>' : '<span class="muted">—</span>') + '</td>' +
-          '<td class="nowrap">' + ui.statusBadge(r.status) + queueAge(r) + '</td>' +
+          '<td class="nowrap">' + ui.statusBadge(r.status) + queueAge(r) + reviewedMark(r) + '</td>' +
           '<td class="nowrap">' + esc(r.missionArea) + '</td>' +
           '<td class="nowrap">' + esc(r.reportType) + '</td>' +
           '<td class="nowrap meta">' + esc(r.submittedAt ? ui.fmtDate(r.submittedAt) : '—') + '</td>' +
@@ -666,6 +689,28 @@
         if (!auth.can('report:feature', r, viewer)) { cb.checked = r.featured; return; }
         store.setFeatured(id, cb.checked);
         ui.toast(cb.checked ? 'Featured in the library.' : 'Removed from featured.', 'good');
+      });
+    });
+
+    ctx.el.querySelectorAll('[data-markreviewed]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var id = b.getAttribute('data-markreviewed');
+        var r = store.reportById(id);
+        if (!auth.can('report:review', r, viewer)) { ui.toast('Not permitted.', 'err'); return; }
+        store.markReviewed(id, viewer.id);
+        ui.toast('Marked reviewed. It has left your queue.', 'good');
+        resolveKeepScroll();
+      });
+    });
+
+    ctx.el.querySelectorAll('[data-unreview]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var id = b.getAttribute('data-unreview');
+        var r = store.reportById(id);
+        if (!auth.can('report:review', r, viewer)) { ui.toast('Not permitted.', 'err'); return; }
+        store.unreview(id);
+        ui.toast('Returned to the review queue.', 'good');
+        resolveKeepScroll();
       });
     });
   }
