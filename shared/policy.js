@@ -35,8 +35,22 @@
     'Poster',
     'Presentation slides',
     'Dataset + description',
-    'Analogue mission report'
+    'Analogue mission report',
+    'Weekly report'
   ];
+
+  /* Weekly reports use a lightweight flow, not the eight-state workflow: the
+     student owns visibility (private/shared) and the professor owns a single,
+     reversible "reviewed" act. Formal report types keep the `released` model
+     unchanged. isWeekly() is the one place that distinction is decided. */
+  var WEEKLY_TYPE = 'Weekly report';
+  function isWeekly(report) {
+    return !!(report && report.reportType === WEEKLY_TYPE);
+  }
+
+  /* Who may see a weekly among peers. `private` hides it from other students
+     but NEVER from the supervisor, who sees every report in every state. */
+  var VISIBILITIES = ['private', 'shared'];
 
   var STANDING = ['active', 'inactive', 'alumnus'];
 
@@ -314,6 +328,8 @@
   return {
     MISSION_AREAS: MISSION_AREAS,
     REPORT_TYPES: REPORT_TYPES,
+    WEEKLY_TYPE: WEEKLY_TYPE,
+    VISIBILITIES: VISIBILITIES,
     STANDING: STANDING,
     STATUSES: STATUSES,
     STATUS_ORDER: STATUS_ORDER,
@@ -326,6 +342,7 @@
     SHARED_USER_FIELDS: SHARED_USER_FIELDS,
 
     isReleased: isReleased,
+    isWeekly: isWeekly,
     isOwner: isOwner,
     can: can,
     allowedTransitions: allowedTransitions,

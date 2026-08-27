@@ -605,3 +605,65 @@ test('changing a password requires the current one', async () => {
   });
   assert.equal(withOld.status, 401);
 });
+
+/* ================= weekly reports: Phase 1 (data + vocabulary) =================
+   The type exists, visibility persists with a private default, and an invalid
+   visibility is refused server-side. No visibility behaviour yet — that is
+   Phase 2. */
+
+test('Weekly report is an accepted report type', async () => {
+  const { cookie } = await login('a@test.local', 'u_a');
+  const res = await call('POST', '/api/reports', {
+    cookie,
+    body: { title: 'Week 1', abstract: 'x', reportType: 'Weekly report' }
+  });
+  assert.equal(res.status, 201);
+  assert.equal((await res.json()).report.reportType, 'Weekly report');
+});
+
+test('a new report defaults to private visibility and it round-trips', async () => {
+  const { cookie } = await login('a@test.local', 'u_a');
+  const created = await call('POST', '/api/reports', {
+    cookie, body: { title: 'Week 2', abstract: 'x', reportType: 'Weekly report' }
+  });
+  assert.equal(created.status, 201);
+  const { report } = await created.json();
+  assert.equal(report.visibility, 'private', 'the default must be private');
+  assert.equal(report.reviewedAt, null);
+  assert.equal(report.reviewedBy, null);
+
+  const read = await call('GET', '/api/reports/' + report.id, { cookie });
+  assert.equal((await read.json()).report.visibility, 'private',
+    'visibility must survive being written and read back');
+});
+
+test('an explicit shared visibility is accepted at creation', async () => {
+  const { cookie } = await login('a@test.local', 'u_a');
+  const res = await call('POST', '/api/reports', {
+    cookie,
+    body: { title: 'Week 3', abstract: 'x', reportType: 'Weekly report', visibility: 'shared' }
+  });
+  assert.equal(res.status, 201);
+  assert.equal((await res.json()).report.visibility, 'shared');
+});
+
+test('an invalid visibility value is rejected at creation', async () => {
+  const { cookie } = await login('a@test.local', 'u_a');
+  const res = await call('POST', '/api/reports', {
+    cookie,
+    body: { title: 'Bad', abstract: 'x', reportType: 'Weekly report', visibility: 'world' }
+  });
+  assert.equal(res.status, 400);
+});
+
+test('visibility cannot be set through the report PATCH whitelist', async () => {
+  const { cookie } = await login('a@test.local', 'u_a');
+  const { report } = await (await call('POST', '/api/reports', {
+    cookie, body: { title: 'Week 4', abstract: 'x', reportType: 'Weekly report' }
+  })).json();
+
+  const res = await call('PATCH', '/api/reports/' + report.id, { cookie, body: { visibility: 'shared' } });
+  assert.equal(res.status, 200, 'the request itself is fine — it just must not set visibility');
+  assert.equal(db.reportById(report.id).visibility, 'private',
+    'visibility must change only through its own gated route, not a metadata edit');
+});

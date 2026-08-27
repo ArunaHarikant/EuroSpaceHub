@@ -77,6 +77,9 @@ CREATE TABLE IF NOT EXISTS reports (
   dataAvailability TEXT DEFAULT '',
   status           TEXT NOT NULL,
   featured         INTEGER NOT NULL DEFAULT 0,
+  visibility       TEXT DEFAULT 'private',
+  reviewedAt       TEXT,
+  reviewedBy       TEXT,
   createdAt        TEXT NOT NULL,
   submittedAt      TEXT,
   updatedAt        TEXT NOT NULL,
@@ -115,6 +118,11 @@ function addColumnIfMissing(table, column, decl) {
 }
 addColumnIfMissing('users', 'notificationsSeenAt', 'TEXT');
 addColumnIfMissing('reports', 'campaign', "TEXT DEFAULT ''");
+/* Weekly-report fields. visibility is student-owned (private/shared); the two
+   reviewed* columns are supervisor-owned and set only via their own endpoint. */
+addColumnIfMissing('reports', 'visibility', "TEXT DEFAULT 'private'");
+addColumnIfMissing('reports', 'reviewedAt', 'TEXT');
+addColumnIfMissing('reports', 'reviewedBy', 'TEXT');
 
 /* ---------------- helpers ---------------- */
 
@@ -239,6 +247,9 @@ function rowToReport(row) {
     dataAvailability: row.dataAvailability,
     status: row.status,
     featured: !!row.featured,
+    visibility: row.visibility || 'private',
+    reviewedAt: row.reviewedAt || null,
+    reviewedBy: row.reviewedBy || null,
     createdAt: row.createdAt,
     submittedAt: row.submittedAt,
     updatedAt: row.updatedAt,
@@ -256,20 +267,20 @@ function insertReport(r) {
   const at = nowISO();
   db.prepare(`INSERT INTO reports
     (id, ownerId, title, missionArea, reportType, campaign, abstract, keywords, coAuthors, file,
-     supplementary, dataAvailability, status, featured, createdAt, submittedAt, updatedAt, history, comments)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
+     supplementary, dataAvailability, status, featured, visibility, createdAt, submittedAt, updatedAt, history, comments)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
     id, r.ownerId, r.title, r.missionArea, r.reportType, r.campaign || '', r.abstract,
     JSON.stringify(r.keywords || []), JSON.stringify(r.coAuthors || []),
     r.file ? JSON.stringify(r.file) : null,
     JSON.stringify(r.supplementary || []), r.dataAvailability || '',
-    r.status || 'draft', r.featured ? 1 : 0,
+    r.status || 'draft', r.featured ? 1 : 0, r.visibility || 'private',
     r.createdAt || at, r.submittedAt || null, r.updatedAt || at,
     JSON.stringify(r.history || []), JSON.stringify(r.comments || []));
   return reportById(id);
 }
 
 const REPORT_PATCHABLE = ['title','missionArea','reportType','campaign','abstract','keywords','coAuthors',
-                          'file','supplementary','dataAvailability','status','featured',
+                          'file','supplementary','dataAvailability','status','featured','visibility',
                           'submittedAt','history','comments'];
 const REPORT_JSON = new Set(['keywords','coAuthors','file','supplementary','history','comments']);
 

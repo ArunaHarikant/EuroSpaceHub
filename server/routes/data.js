@@ -111,12 +111,24 @@ router.post('/reports', requireAuth, (req, res) => {
   const err = validate(patch, { partial: false });
   if (err) return res.status(400).json({ error: err });
 
+  /* Visibility is accepted at creation but is NOT on the PATCH whitelist — like
+     `featured` and `status`, it changes only through its own gated route (added
+     in a later phase). Validated here against the closed vocabulary. */
+  let visibility = 'private';
+  if ('visibility' in (req.body || {})) {
+    if (!policy.VISIBILITIES.includes(req.body.visibility)) {
+      return res.status(400).json({ error: 'Unknown visibility.' });
+    }
+    visibility = req.body.visibility;
+  }
+
   const at = db.nowISO();
   const report = db.insertReport(Object.assign({
     ownerId: req.actor.id,              /* never from the body */
     missionArea: 'Lunar',
     reportType: 'Research paper',
     status: 'draft',
+    visibility,
     createdAt: at,
     updatedAt: at,
     history: [{ at, by: req.actor.id, from: null, to: 'draft', note: 'Record created.' }]
