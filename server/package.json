@@ -1,0 +1,22 @@
+{
+  "name": "eurospacehub-server",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Backend for the Lunar & Mars Research Hub: sessions, reports and Backblaze B2 file storage.",
+  "main": "index.js",
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "scripts": {
+    "start": "node index.js",
+    "seed": "node seed.js",
+    "test": "node --test test/api.test.js",
+    "seed:demo": "node seed-demo.js"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.660.0",
+    "@aws-sdk/s3-request-presigner": "^3.660.0",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.0"
+  }
+}

@@ -355,3 +355,253 @@ test('the server enforces the same policy module the browser loads', () => {
                fromServer.can('report:read', report, other));
   assert.equal(fromServer.can('file:download', report, other), false);
 });
+
+/* ================= field persistence =================
+   These are regression tests for fields the client wrote and the server
+   silently discarded. A dropped field produces no error anywhere — the request
+   succeeds, the value is simply gone on the next read — so nothing but an
+   explicit round-trip assertion catches it. */
+
+test('campaign survives a create/read round trip', async () => {
+  const { cookie } = await login('a@test.local', 'u_a');
+  const created = await call('POST', '/api/reports', {
+    cookie,
+    body: { title: 'Campaign round trip', abstract: 'x', missionArea: 'Lunar',
+            reportType: 'Research paper', campaign: 'EuroMoonMars' }
+  });
+  assert.equal(created.status, 201);
+  const { report } = await created.json();
+  assert.equal(report.campaign, 'EuroMoonMars', 'campaign must not be dropped on create');
+
+  const read = await call('GET', '/api/reports/' + report.id, { cookie });
+  assert.equal((await read.json()).report.campaign, 'EuroMoonMars',
+    'campaign must survive being written to the database and read back');
+});
+
+test('campaign can be edited and cleared', async () => {
+  const { cookie } = await login('a@test.local', 'u_a');
+  const { report } = await (await call('POST', '/api/reports', {
+    cookie,
+    body: { title: 'Campaign edit', abstract: 'x', campaign: 'ExoGeoLab' }
+  })).json();
+
+  const patched = await call('PATCH', '/api/reports/' + report.id, {
+    cookie, body: { campaign: 'Lunar south-pole study' }
+  });
+  assert.equal((await patched.json()).report.campaign, 'Lunar south-pole study');
+
+  const cleared = await call('PATCH', '/api/reports/' + report.id, { cookie, body: { campaign: '' } });
+  assert.equal((await cleared.json()).report.campaign, '', 'an empty campaign must clear the grouping');
+});
+
+test('an over-long campaign is rejected rather than truncated', async () => {
+  const { cookie } = await login('a@test.local', 'u_a');
+  const res = await call('POST', '/api/reports', {
+    cookie, body: { title: 'Too long', abstract: 'x', campaign: 'z'.repeat(121) }
+  });
+  assert.equal(res.status, 400);
+});
+
+test('the notification read-marker persists and is not another account\'s to set', async () => {
+  const a = await login('a@test.local', 'u_a');
+  /* The supervisor, deliberately: the marker is owned by its account and by
+     nobody else, so even full supervisory access must not reach it. (u_b is
+     unusable here — an earlier test rotates its password for good.) */
+  const sup = await login('sup@test.local', 'u_sup');
+
+  const mine = await call('POST', '/api/users/u_a/notifications-seen', { cookie: a.cookie });
+  assert.equal(mine.status, 200);
+  const seenAt = (await mine.json()).user.notificationsSeenAt;
+  assert.ok(seenAt, 'the marker must come back set, not undefined');
+
+  /* Read it back through a fresh request: the column has to exist, not just
+     the response object. */
+  const reread = await call('GET', '/api/users/u_a', { cookie: a.cookie });
+  assert.equal((await reread.json()).user.notificationsSeenAt, seenAt);
+
+  const theirs = await call('POST', '/api/users/u_a/notifications-seen', { cookie: sup.cookie });
+  assert.equal(theirs.status, 403, 'no other account, supervisor included, may clear an inbox');
+});
+
+/* ================= account creation ================= */
+
+test('only a supervisor may create an account', async () => {
+  const { cookie } = await login('a@test.local', 'u_a');
+  const res = await call('POST', '/api/users', {
+    cookie, body: { fullName: 'Sneaky', email: 'sneaky@test.local' }
+  });
+  assert.equal(res.status, 403);
+  assert.equal(db.userByEmail('sneaky@test.local'), null, 'nothing may be written on a refusal');
+});
+
+test('an unauthenticated visitor cannot create an account', async () => {
+  const res = await call('POST', '/api/users', {
+    body: { fullName: 'Anon', email: 'anon@test.local' }
+  });
+  assert.equal(res.status, 401);
+  assert.equal(db.userByEmail('anon@test.local'), null);
+});
+
+test('a supervisor creates an account and gets the password exactly once', async () => {
+  const { cookie } = await login('sup@test.local', 'u_sup');
+  const res = await call('POST', '/api/users', {
+    cookie,
+    body: { fullName: 'Intern C', email: 'c@test.local', institution: 'ISU', programme: 'MSc' }
+  });
+  assert.equal(res.status, 201);
+  const { user, initialPassword } = await res.json();
+  assert.ok(initialPassword && initialPassword.length >= 8);
+  assert.equal(user.role, 'intern');
+  assert.equal(user.supervisorId, 'u_sup');
+  assert.ok(!('passwordHash' in user) && !('passwordSalt' in user),
+    'credentials must never appear in the response');
+
+  /* The password must actually work — the point of the whole flow. */
+  const signedIn = await fetch(base + '/api/auth/login', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: 'c@test.local', password: initialPassword })
+  });
+  assert.equal(signedIn.status, 200);
+
+  /* Re-reading the profile must not surface the password again. */
+  const reread = await call('GET', '/api/users/' + user.id, { cookie });
+  assert.ok(!('initialPassword' in (await reread.json()).user));
+});
+
+test('a password supplied by the client is ignored, not honoured', async () => {
+  const { cookie } = await login('sup@test.local', 'u_sup');
+  const res = await call('POST', '/api/users', {
+    cookie,
+    body: { fullName: 'Intern D', email: 'd@test.local', password: 'chosen-by-caller',
+            role: 'supervisor', standing: 'alumnus' }
+  });
+  assert.equal(res.status, 201);
+  const { initialPassword } = await res.json();
+  assert.notEqual(initialPassword, 'chosen-by-caller');
+
+  const withChosen = await fetch(base + '/api/auth/login', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: 'd@test.local', password: 'chosen-by-caller' })
+  });
+  assert.equal(withChosen.status, 401, 'a client-supplied password must never be set');
+});
+
+test('account creation validates the address and refuses duplicates', async () => {
+  const { cookie } = await login('sup@test.local', 'u_sup');
+
+  const noName = await call('POST', '/api/users', { cookie, body: { fullName: '', email: 'e@test.local' } });
+  assert.equal(noName.status, 400);
+
+  const badEmail = await call('POST', '/api/users', { cookie, body: { fullName: 'E', email: 'not-an-address' } });
+  assert.equal(badEmail.status, 400);
+
+  const dupe = await call('POST', '/api/users', { cookie, body: { fullName: 'Clash', email: 'a@test.local' } });
+  assert.equal(dupe.status, 409);
+});
+
+/* ================= featuring and deletion =================
+   Both have dedicated endpoints. The browser previously routed featuring
+   through PATCH /reports/:id, whose whitelist excludes `featured` — so the
+   toggle appeared to work and was discarded. These assert the real routes. */
+
+test('featured is not settable through the report PATCH whitelist', async () => {
+  const { cookie } = await login('sup@test.local', 'u_sup');
+  const r = seedReport('u_a', 'published', 'r_feat_patch');
+
+  const res = await call('PATCH', '/api/reports/' + r.id, { cookie, body: { featured: true } });
+  assert.equal(res.status, 200, 'the request itself is fine — it just must not set featured');
+  assert.equal(db.reportById(r.id).featured, false,
+    'featuring must go through its own gated route, not ride along in an edit');
+});
+
+test('the featured route pins and unpins a released record', async () => {
+  const { cookie } = await login('sup@test.local', 'u_sup');
+  const r = seedReport('u_a', 'published', 'r_feat_route');
+
+  const on = await call('POST', '/api/reports/' + r.id + '/featured', { cookie, body: { featured: true } });
+  assert.equal(on.status, 200);
+  assert.equal((await on.json()).report.featured, true);
+  assert.equal(db.reportById(r.id).featured, true, 'it must actually persist');
+
+  const off = await call('POST', '/api/reports/' + r.id + '/featured', { cookie, body: { featured: false } });
+  assert.equal((await off.json()).report.featured, false);
+});
+
+test('an unreleased record cannot be featured, and an intern cannot feature at all', async () => {
+  const sup = await login('sup@test.local', 'u_sup');
+  const a = await login('a@test.local', 'u_a');
+
+  const draft = seedReport('u_a', 'draft', 'r_feat_draft');
+  const refused = await call('POST', '/api/reports/' + draft.id + '/featured',
+    { cookie: sup.cookie, body: { featured: true } });
+  assert.equal(refused.status, 403, 'only released records can be pinned');
+  assert.equal(db.reportById(draft.id).featured, false);
+
+  const released = seedReport('u_a', 'published', 'r_feat_intern');
+  const byIntern = await call('POST', '/api/reports/' + released.id + '/featured',
+    { cookie: a.cookie, body: { featured: true } });
+  assert.equal(byIntern.status, 403, 'featuring is a supervisory act even on your own record');
+  assert.equal(db.reportById(released.id).featured, false);
+});
+
+test('delete is supervisor-only and actually removes the row', async () => {
+  const sup = await login('sup@test.local', 'u_sup');
+  const a = await login('a@test.local', 'u_a');
+  const r = seedReport('u_a', 'draft', 'r_del');
+
+  const byOwner = await call('DELETE', '/api/reports/' + r.id, { cookie: a.cookie });
+  assert.equal(byOwner.status, 403, 'a hard delete is not the author\'s to make');
+  assert.ok(db.reportById(r.id), 'a refused delete must leave the record intact');
+
+  const bySup = await call('DELETE', '/api/reports/' + r.id, { cookie: sup.cookie });
+  assert.equal(bySup.status, 200);
+  assert.equal(db.reportById(r.id), null, 'the row must be gone, not just hidden');
+
+  const again = await call('DELETE', '/api/reports/' + r.id, { cookie: sup.cookie });
+  assert.equal(again.status, 404, 'deleting it twice is a 404, not a crash');
+});
+
+/* ================= password change ================= */
+
+test('the password minimum comes from the shared policy, not a local constant', async () => {
+  const { cookie } = await login('sup@test.local', 'u_sup');
+  assert.equal(typeof policy.MIN_PASSWORD_LENGTH, 'number');
+
+  const tooShort = 'x'.repeat(policy.MIN_PASSWORD_LENGTH - 1);
+  const res = await call('POST', '/api/auth/password', {
+    cookie, body: { currentPassword: 'pw-u_sup', newPassword: tooShort }
+  });
+  assert.equal(res.status, 400);
+  assert.match((await res.json()).error, new RegExp(String(policy.MIN_PASSWORD_LENGTH)),
+    'the message must quote the shared value so the form and the server agree');
+});
+
+test('changing a password requires the current one', async () => {
+  /* A dedicated account: a successful change drops this user's sessions. */
+  const { hash, salt } = session.hashPassword('pw-u_pwtest');
+  db.insertUser({ id: 'u_pwtest', role: 'intern', fullName: 'PW Test', email: 'pw@test.local',
+                  passwordHash: hash, passwordSalt: salt, standing: 'active', createdAt: db.nowISO() });
+  const { cookie } = await login('pw@test.local', 'u_pwtest');
+
+  const wrong = await call('POST', '/api/auth/password', {
+    cookie, body: { currentPassword: 'not-it', newPassword: 'a-long-enough-one' }
+  });
+  assert.equal(wrong.status, 403);
+
+  const right = await call('POST', '/api/auth/password', {
+    cookie, body: { currentPassword: 'pw-u_pwtest', newPassword: 'a-long-enough-one' }
+  });
+  assert.equal(right.status, 200);
+
+  /* The new password works and the old one does not. */
+  const withNew = await fetch(base + '/api/auth/login', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: 'pw@test.local', password: 'a-long-enough-one' })
+  });
+  assert.equal(withNew.status, 200);
+  const withOld = await fetch(base + '/api/auth/login', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: 'pw@test.local', password: 'pw-u_pwtest' })
+  });
+  assert.equal(withOld.status, 401);
+});

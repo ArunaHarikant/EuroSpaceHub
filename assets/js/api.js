@@ -1,9 +1,9 @@
 /* ==========================================================================
-   api.js — the browser's client for the real backend.
+   api.js — the browser's client for the server.
 
-   Enabled only when window.ESH_CONFIG.apiBase is set, which the server serves
-   from /config.js. Opened from disk with no server, the file is inert and the
-   hub falls back to its localStorage demo mode.
+   The server is the only source of data, sessions and authorisation. There is
+   no offline mode: if this module cannot reach the API, the hub says so rather
+   than showing something it made up.
 
    The session is an httpOnly cookie: nothing here reads or writes it, and
    `credentials: 'same-origin'` is what carries it. `session()` returns the
@@ -17,11 +17,10 @@
   'use strict';
 
   var CFG = global.ESH_CONFIG || {};
-  var BASE = CFG.apiBase || null;
+  var BASE = CFG.apiBase || '/api';
 
   var sessionUser = null;      /* filled by bootstrap() */
 
-  function enabled() { return !!BASE; }
   function session() { return sessionUser; }
 
   /* ---------------- transport ---------------- */
@@ -59,14 +58,25 @@
 
   /* ---------------- session ---------------- */
 
-  /** One round trip on load: who am I, and everything I may see. */
+  /**
+   * One round trip on load: who am I, and everything I may see.
+   *
+   * Rejects when the server cannot be reached. It previously resolved with
+   * empty arrays instead, which made an outage indistinguishable from a
+   * signed-out visitor looking at a hub that is empty by design — the caller
+   * rendered "nothing here" over what was actually "we could not ask".
+   *
+   * `/bootstrap` answers 200 with a null user for an anonymous caller, so any
+   * non-2xx really is a fault rather than an expected refusal.
+   */
   function bootstrap() {
     return get('/bootstrap', { quiet: true }).then(function (data) {
       sessionUser = data.user || null;
       return data;
-    }).catch(function () {
+    })['catch'](function (err) {
       sessionUser = null;
-      return { user: null, reports: [], users: [] };
+      err.unreachable = true;
+      throw err;
     });
   }
 
@@ -112,7 +122,14 @@
   var users = {
     list:   function ()         { return get('/users'); },
     get:    function (id)       { return get('/users/' + encodeURIComponent(id)); },
-    update: function (id, body) { return patch('/users/' + encodeURIComponent(id), body); }
+    update: function (id, body) { return patch('/users/' + encodeURIComponent(id), body); },
+    /* Supervisor-only. Resolves with the new user AND the one-time initial
+       password, which the caller must display immediately — it is not stored
+       anywhere in retrievable form and cannot be shown again. */
+    create: function (body)     { return post('/users', body); },
+    markNotificationsSeen: function (id) {
+      return post('/users/' + encodeURIComponent(id) + '/notifications-seen', {});
+    }
   };
 
   /* ---------------- files ---------------- */
@@ -180,7 +197,7 @@
 
   global.ESH = global.ESH || {};
   global.ESH.api = {
-    enabled: enabled, session: session, bootstrap: bootstrap,
+    session: session, bootstrap: bootstrap,
     login: login, logout: logout, changePassword: changePassword,
     issueTemporaryPassword: issueTemporaryPassword,
     reports: reports, users: users,

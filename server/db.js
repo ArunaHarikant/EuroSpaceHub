@@ -1,5 +1,9 @@
 /* ==========================================================================
-   db.js — SQLite via node:sqlite (built into Node 22.5+, no native build).
+   db.js — SQLite via node:sqlite (built into Node 22.13+, no native build).
+
+   22.13 rather than 22.5: the module landed in 22.5 but behind
+   --experimental-sqlite, and the flag was only dropped in 22.13. On anything
+   older this require() throws ERR_UNKNOWN_BUILTIN_MODULE.
 
    The server is authoritative for users, sessions and reports. That is not
    architectural taste: the policy gate can only mean something if the actor
@@ -46,7 +50,8 @@ CREATE TABLE IF NOT EXISTS users (
   standing       TEXT DEFAULT 'active',
   internalNotes  TEXT DEFAULT '',
   createdAt      TEXT NOT NULL,
-  passwordChangedAt TEXT
+  passwordChangedAt TEXT,
+  notificationsSeenAt TEXT
 );
 
 CREATE TABLE IF NOT EXISTS sessions (
@@ -63,6 +68,7 @@ CREATE TABLE IF NOT EXISTS reports (
   title            TEXT NOT NULL,
   missionArea      TEXT NOT NULL,
   reportType       TEXT NOT NULL,
+  campaign         TEXT DEFAULT '',
   abstract         TEXT NOT NULL,
   keywords         TEXT DEFAULT '[]',
   coAuthors        TEXT DEFAULT '[]',
@@ -97,6 +103,19 @@ CREATE TABLE IF NOT EXISTS uploads (
 CREATE INDEX IF NOT EXISTS idx_uploads_report ON uploads(reportId);
 `);
 
+/* Additive migrations. `CREATE TABLE IF NOT EXISTS` leaves an existing database
+   on its original schema, so a column added above never reaches a deployment
+   that has already run. Each entry here is re-checked at every boot and applied
+   only if missing — adding a nullable/defaulted column is the one kind of change
+   that is safe to run unconditionally against live data. */
+function addColumnIfMissing(table, column, decl) {
+  const cols = db.prepare(`PRAGMA table_info(${table})`).all();
+  if (cols.some((c) => c.name === column)) return;
+  db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${decl}`);
+}
+addColumnIfMissing('users', 'notificationsSeenAt', 'TEXT');
+addColumnIfMissing('reports', 'campaign', "TEXT DEFAULT ''");
+
 /* ---------------- helpers ---------------- */
 
 const nowISO = () => new Date().toISOString();
@@ -125,7 +144,8 @@ function rowToUser(row) {
     standing: row.standing,
     internalNotes: row.internalNotes,
     createdAt: row.createdAt,
-    passwordChangedAt: row.passwordChangedAt
+    passwordChangedAt: row.passwordChangedAt,
+    notificationsSeenAt: row.notificationsSeenAt
     /* passwordHash / passwordSalt deliberately never leave this module */
   };
 }
@@ -152,7 +172,8 @@ function insertUser(u) {
 }
 
 const USER_PATCHABLE = ['fullName','email','institution','programme','startDate','endDate',
-                        'researchTopic','keywords','bio','photoUrl','links','standing','internalNotes'];
+                        'researchTopic','keywords','bio','photoUrl','links','standing','internalNotes',
+                        'notificationsSeenAt'];
 
 function updateUser(id, patch) {
   const sets = [], vals = [];
@@ -209,6 +230,7 @@ function rowToReport(row) {
     title: row.title,
     missionArea: row.missionArea,
     reportType: row.reportType,
+    campaign: row.campaign || '',
     abstract: row.abstract,
     keywords: j(row.keywords, []),
     coAuthors: j(row.coAuthors, []),
@@ -233,10 +255,10 @@ function insertReport(r) {
   const id = r.id || uid('r');
   const at = nowISO();
   db.prepare(`INSERT INTO reports
-    (id, ownerId, title, missionArea, reportType, abstract, keywords, coAuthors, file,
+    (id, ownerId, title, missionArea, reportType, campaign, abstract, keywords, coAuthors, file,
      supplementary, dataAvailability, status, featured, createdAt, submittedAt, updatedAt, history, comments)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
-    id, r.ownerId, r.title, r.missionArea, r.reportType, r.abstract,
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
+    id, r.ownerId, r.title, r.missionArea, r.reportType, r.campaign || '', r.abstract,
     JSON.stringify(r.keywords || []), JSON.stringify(r.coAuthors || []),
     r.file ? JSON.stringify(r.file) : null,
     JSON.stringify(r.supplementary || []), r.dataAvailability || '',
@@ -246,7 +268,7 @@ function insertReport(r) {
   return reportById(id);
 }
 
-const REPORT_PATCHABLE = ['title','missionArea','reportType','abstract','keywords','coAuthors',
+const REPORT_PATCHABLE = ['title','missionArea','reportType','campaign','abstract','keywords','coAuthors',
                           'file','supplementary','dataAvailability','status','featured',
                           'submittedAt','history','comments'];
 const REPORT_JSON = new Set(['keywords','coAuthors','file','supplementary','history','comments']);

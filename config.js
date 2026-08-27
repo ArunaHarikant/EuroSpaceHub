@@ -1,10 +1,16 @@
-/* Fallback configuration for running the hub WITHOUT the backend — opened from
-   disk, or served by any plain static server.
+/* Deployment configuration.
 
-   With the backend running, server/index.js registers its own /config.js route
-   ahead of the static handler and this file is never served. That route sets
-   apiBase to "/api", which is what flips the hub out of demo mode.
+   The hub talks to its own server; there is no offline build. This file is the
+   one place to point it somewhere other than the default same-origin `/api` —
+   useful if the API is ever split onto its own host.
 
-   The guard below means whichever copy arrives first wins, so the order can
-   never produce a half-configured page. */
-window.ESH_CONFIG = window.ESH_CONFIG || { apiBase: null };
+   The running server registers its own /config.js route ahead of the static
+   handler, so in a normal deployment this file is never served. It exists so
+   that a static host in front of the API still gets a working page, and the
+   guard below means whichever copy arrives first wins.
+
+   Opened straight from disk, `/api` resolves to nothing, the first request
+   fails, and the hub says it cannot reach its server. That is the honest
+   answer: without the server there is no data, no session and no access
+   control, so there is nothing to show. */
+window.ESH_CONFIG = window.ESH_CONFIG || { apiBase: '/api' };

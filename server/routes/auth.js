@@ -84,8 +84,8 @@ router.get('/me', (req, res) => {
 /* Change your own password while signed in. */
 router.post('/password', session.requireAuth, (req, res) => {
   const { currentPassword, newPassword } = req.body || {};
-  if (String(newPassword || '').length < 8) {
-    return res.status(400).json({ error: 'Use at least 8 characters.' });
+  if (String(newPassword || '').length < policy.MIN_PASSWORD_LENGTH) {
+    return res.status(400).json({ error: 'Use at least ' + policy.MIN_PASSWORD_LENGTH + ' characters.' });
   }
   const creds = db.credentialsFor(req.actor.id);
   if (!session.verifyPassword(String(currentPassword || ''), creds.passwordHash, creds.passwordSalt)) {

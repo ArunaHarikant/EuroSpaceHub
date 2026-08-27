@@ -358,27 +358,16 @@
     var label = esc(r.file.name) +
       (r.file.size ? ' <span class="meta">(' + esc(fmtBytes(r.file.size)) + ')</span>' : '');
 
-    if (store.apiMode && store.apiMode()) {
-      return '<p><button class="btn btn--primary" type="button" data-download="' + esc(r.id) + '">' +
-               'Download file</button></p>' +
-             '<p class="meta">' + label + '</p>' +
-             '<p class="field__hint" data-download-status="' + esc(r.id) + '" hidden></p>';
-    }
-
-    /* Demo mode: the binary only ever existed in this tab. */
-    var handle = store.fileHandle(r.file);
-    if (handle && handle.available) {
-      return '<p><a class="btn btn--primary" href="' + esc(handle.url) + '" download="' + esc(r.file.name) + '">Download file</a></p>' +
-             '<p class="meta">' + label + '</p>';
-    }
-    return '<p><span class="btn" aria-disabled="true" title="Not available in this demo build">Download file</span></p>' +
-           '<p class="meta">' + label + ' — <em>the binary is not stored in this demonstration build; ' +
-           'only file metadata is persisted. See the access-control notes.</em></p>';
+    /* No direct href: the object key never reaches the browser, and the link
+       is minted per click after the server re-checks can('file:download'). */
+    return '<p><button class="btn btn--primary" type="button" data-download="' + esc(r.id) + '">' +
+             'Download file</button></p>' +
+           '<p class="meta">' + label + '</p>' +
+           '<p class="field__hint" data-download-status="' + esc(r.id) + '" hidden></p>';
   }
 
   /** Attach the gated-download handler to any file controls inside `root`. */
   function bindFileControl(root) {
-    if (!store.apiMode || !store.apiMode()) return;
     (root || document).querySelectorAll('[data-download]').forEach(function (btn) {
       btn.addEventListener('click', function () {
         var id = btn.getAttribute('data-download');

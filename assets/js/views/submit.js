@@ -129,12 +129,9 @@
                 (r.file.size ? ' (' + esc(ui.fmtBytes(r.file.size)) + ')' : '') +
                 ' — choose a new file to replace it.</p>'
               : '') +
-            (ESH.store.apiMode()
-              ? '<p class="field__hint">The file uploads straight to encrypted Backblaze B2 storage. ' +
-                'The bucket is private: downloads are issued as short-lived signed links, and only to ' +
-                'people the access rules allow.</p>'
-              : '<p class="field__hint"><em>Demonstration limit:</em> the file stays in memory for this browser ' +
-                'tab only. Its name, size and type are saved; the binary is not.</p>') +
+            '<p class="field__hint">The file uploads straight to encrypted Backblaze B2 storage. ' +
+              'The bucket is private: downloads are issued as short-lived signed links, and only to ' +
+              'people the access rules allow.</p>' +
             '<p class="field__hint" id="uploadProgress" hidden ' +
               'role="status" style="font-variant-numeric:tabular-nums"></p></div>' +
           '<div class="field"><span class="field__label">Supplementary material (links)</span>' +
@@ -255,37 +252,7 @@
          server keys every object under its report id and will not sign a PUT
          for a report you cannot edit, so there is no such thing as an orphan
          upload floating free of a permission check. */
-      if (store.apiMode()) {
-        saveViaApi(patch, r, isEdit, intent, pendingFile, f);
-        return;
-      }
-
-      if (pendingFile) patch.file = store.putBlob(pendingFile);
-
-      var rec;
-      if (isEdit) {
-        if (!auth.can('report:edit', r, viewer)) { ui.toast('You cannot edit this record in its current state.', 'err'); return; }
-        rec = store.updateReport(r.id, patch);
-        store.logHistory(r.id, viewer.id, r.status, r.status, 'Record details updated.');
-      } else {
-        patch.ownerId = viewer.id;
-        patch.status = 'draft';
-        rec = store.addReport(patch);
-        store.logHistory(rec.id, viewer.id, null, 'draft', 'Record created.');
-      }
-
-      if (intent === 'submit') {
-        if (auth.canTransition(rec, 'submitted', viewer)) {
-          store.setStatus(rec.id, 'submitted', viewer.id, 'Submitted for supervisor review.');
-          ui.toast('Submitted for review.', 'good');
-        } else {
-          ui.toast('Saved, but the record could not be submitted from its current state.', 'err');
-        }
-      } else {
-        ui.toast(isEdit ? 'Changes saved.' : 'Draft saved.', 'good');
-      }
-
-      router.navigate('#/report/' + rec.id);
+      saveViaApi(patch, r, isEdit, intent, pendingFile, f);
     });
   }
 

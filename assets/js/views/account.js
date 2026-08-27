@@ -1,14 +1,25 @@
 /* ==========================================================================
-   views/account.js — sign-in, registration and the access-denied page.
+   views/account.js — sign-in, the access-denied page, and the two explanations
+   that stand where a registration form and a reset form used to be.
 
-   REMINDER: authentication here is a stub. Passwords are stored in plain text
-   in localStorage and compared in the browser. Nothing on this page should be
-   read as a security control; it exists to demonstrate the role model.
+   This hub is closed. Accounts are ISSUED by the supervisor, not applied for,
+   and replacement passwords are handed over directly. Both of those are
+   deliberate:
+
+   - An open registration form on a closed hub is a way in for anyone with the
+     URL. `can('user:create')` is supervisor-only and enforced server-side, so
+     the missing form is a convenience rather than the control.
+   - A reset link has to be emailed to prove control of the mailbox. There is
+     no mail service, and a form that prints its own token on the page is an
+     account-takeover hole rather than a password reset.
+
+   Both routes still exist so that an old link or a bookmark lands on an
+   explanation instead of a 404.
    ========================================================================== */
 (function (global) {
   'use strict';
 
-  var ESH = global.ESH, ui = ESH.ui, store = ESH.store, auth = ESH.auth, router = ESH.router;
+  var ESH = global.ESH, ui = ESH.ui, auth = ESH.auth, router = ESH.router;
   var esc = ui.esc;
 
   function nextFrom(query) {
@@ -20,57 +31,26 @@
 
   function signin(ctx) {
     var target = nextFrom(ctx.query);
-    var demoAccounts = [
-      { id: store.SUPERVISOR_ID, label: 'Prof. Bernard Foing', sub: 'Supervisor — full access' },
-      { id: 'u_cosup',           label: 'Co-Supervisor Name',  sub: 'Supervisor — designated co-supervisor' },
-      { id: 'u_i1',              label: 'Intern Name A',       sub: 'Intern — own profile and reports only' },
-      { id: 'u_i2',              label: 'Intern Name B',       sub: 'Intern — own profile and reports only' }
-    ];
 
     ctx.el.innerHTML =
-    '<div class="wrap wrap--900">' +
+    '<div class="wrap wrap--680">' +
       '<h1>Sign in</h1>' +
-      '<p class="lede">Access your researcher profile, submissions and — for supervisors — the review dashboard.</p>' +
+      '<p class="lede">Access your researcher profile, submissions and — for supervisors — the ' +
+        'review dashboard.</p>' +
 
-      ui.notice('warn', 'Demonstration authentication',
-        'This build has no server. Credentials are checked in the browser against records in ' +
-        '<code>localStorage</code>, and the resulting "session" is a user id in the same store. ' +
-        'It demonstrates the role model; it is not a security control. ' +
-        '<a href="#/about-demo">Read the access-control notes</a>.') +
+      '<form class="card" id="signinForm" novalidate>' +
+        '<div class="field"><label for="siEmail">Email address <span class="req">*</span></label>' +
+          '<input type="email" id="siEmail" name="email" autocomplete="username" required></div>' +
+        '<div class="field"><label for="siPass">Password <span class="req">*</span></label>' +
+          '<input type="password" id="siPass" name="password" autocomplete="current-password" required></div>' +
+        '<div class="btn-row"><button class="btn btn--primary" type="submit">Sign in</button></div>' +
+        '<p id="siErr" class="field__err" hidden></p>' +
+        '<p class="field__hint mt-14">No account, or lost your password? ' +
+          '<a href="#/access">Prof. Foing issues both directly.</a></p>' +
+      '</form>' +
 
-      '<div class="split">' +
-        '<form class="card" id="signinForm" novalidate>' +
-          '<h3>Sign in with credentials</h3>' +
-          '<div class="field"><label for="siEmail">Email address <span class="req">*</span></label>' +
-            '<input type="email" id="siEmail" name="email" autocomplete="username" required></div>' +
-          '<div class="field"><label for="siPass">Password <span class="req">*</span></label>' +
-            '<input type="password" id="siPass" name="password" autocomplete="current-password" required>' +
-            '<p class="field__hint">Every seeded demo account uses the password <code>demo</code>.</p></div>' +
-          '<div class="btn-row"><button class="btn btn--primary" type="submit">Sign in</button>' +
-            '<a class="btn btn--ghost" href="#/register">Register instead</a></div>' +
-          '<p id="siErr" class="field__err" hidden></p>' +
-          '<p class="field__hint mt-14">' +
-            '<a href="#/reset">Forgotten your password?</a></p>' +
-        '</form>' +
-
-        '<div class="card">' +
-          '<h3>Demo role switcher</h3>' +
-          '<p class="meta">Assume a role without credentials to explore what each one can see. ' +
-            'This bypass exists only because the build is a demonstration.</p>' +
-          '<div class="grid-8 mt-12">' +
-            demoAccounts.map(function (a) {
-              var u = store.userById(a.id);
-              if (!u) return '';
-              return '<button class="btn btn--menu" type="button" data-assume="' + esc(a.id) + '">' +
-                '<span class="d-block"><span class="d-block text-ink">' + esc(a.label) + '</span>' +
-                '<span class="meta">' + esc(a.sub) + '</span></span></button>';
-            }).join('') +
-          '</div>' +
-          '<hr>' +
-          '<p class="meta mb-0">Signed out you see only Prof. Foing\'s profile ' +
-            'page and this sign-in screen — no reports, no library, no researcher profiles.</p>' +
-        '</div>' +
-      '</div>' +
+      '<p class="meta mt-20">Signed out you see only this page and the hub\'s front door — ' +
+        'no reports, no library, no researcher names.</p>' +
     '</div>';
 
     var form = document.getElementById('signinForm');
@@ -84,333 +64,65 @@
       if (!ui.isEmail(email)) { ui.fieldError(form.elements.email, 'Enter a valid email address.'); ui.focusFirstError(form); return; }
       if (!pass) { ui.fieldError(form.elements.password, 'Enter your password.'); ui.focusFirstError(form); return; }
 
-      var res = auth.signIn(email, pass);
-      if (!res.ok) { errEl.hidden = false; errEl.textContent = res.error; return; }
-      ui.toast('Signed in as ' + res.user.fullName + '.', 'good');
-      router.navigate(res.user.role === 'supervisor' && target === '#/' ? '#/dashboard' : target);
-    });
-
-    ctx.el.querySelectorAll('[data-assume]').forEach(function (b) {
-      b.addEventListener('click', function () {
-        var res = auth.assume(b.getAttribute('data-assume'));
-        if (!res.ok) { ui.toast(res.error, 'err'); return; }
-        ui.toast('Now acting as ' + res.user.fullName + ' (' + res.user.role + ').', 'good');
-        router.navigate(res.user.role === 'supervisor' ? '#/dashboard' : '#/me');
+      var btn = form.querySelector('button[type=submit]');
+      btn.disabled = true;
+      auth.signIn(email, pass).then(function (res) {
+        btn.disabled = false;
+        if (!res || !res.ok) {
+          errEl.hidden = false;
+          errEl.textContent = (res && res.error) || 'Sign-in failed. Please try again.';
+          return;
+        }
+        /* The cache was filled for the anonymous actor; refill it as this one. */
+        return ESH.store.hydrate().then(function () {
+          ui.toast('Signed in as ' + res.user.fullName + '.', 'good');
+          router.navigate(res.user.role === 'supervisor' && target === '#/' ? '#/dashboard' : target);
+        });
+      })['catch'](function (err) {
+        btn.disabled = false;
+        errEl.hidden = false;
+        errEl.textContent = err.message || 'Sign-in failed. Please try again.';
       });
     });
   }
 
-  /* ==========================================================================
-     PASSWORD RESET
-
-     A real deployment mails a single-use token to the address on file, and the
-     token is the only thing proving you control that mailbox. There is no mail
-     server in this build, so the token has to be surfaced on screen — which
-     means anyone who knows an address can reset that account. That is a real
-     hole, it is stated plainly below rather than papered over, and it is the
-     one part of this flow a real backend must replace.
-
-     What IS faithful: single-use tokens with a 30-minute expiry, a neutral
-     response that does not reveal whether an account exists, and invalidation
-     of the token the moment it is spent.
-     ========================================================================== */
-
-  function reset(ctx) {
-    if (auth.isAuthenticated()) {
-      ctx.el.innerHTML = '<div class="wrap">' +
-        ui.notice('info', 'You are already signed in',
-          'Change your password from <a href="#/me">your profile</a>, or sign out first.') + '</div>';
-      return;
-    }
-    if (ctx.query.token) { resetWithToken(ctx, ctx.query.token); return; }
-    requestReset(ctx);
-  }
-
-  /* --- step 1: ask for the address --- */
-  function requestReset(ctx) {
-    ctx.el.innerHTML =
-    '<div class="wrap wrap--620">' +
-      '<p class="meta mb-10"><a href="#/signin">&larr; Back to sign in</a></p>' +
-      '<h1>Reset your password</h1>' +
-      '<p class="lede">Enter the institutional email address on your researcher account.</p>' +
-
-      ui.notice('danger', 'No email is sent in this build',
-        'A real deployment would email you a single-use link and that link would be the only ' +
-        'proof you control the mailbox. This build has no server and no mail service, so the link ' +
-        'is shown on this page instead — meaning <strong>anyone who knows an address can reset ' +
-        'that account</strong>. Replacing this step with a real emailed token is the single most ' +
-        'important change a production build must make.') +
-
-      '<form class="card" id="resetReqForm" novalidate>' +
-        '<div class="field"><label for="rqEmail">Email address <span class="req">*</span></label>' +
-          '<input type="email" id="rqEmail" name="email" autocomplete="username" required></div>' +
-        '<div class="btn-row"><button class="btn btn--primary" type="submit">Continue</button>' +
-          '<a class="btn btn--ghost" href="#/signin">Cancel</a></div>' +
-      '</form>' +
-
-      '<div id="resetOut" class="mt-20"></div>' +
-
-      '<hr><p class="meta">Prof. Foing can also issue you a temporary password directly — for a ' +
-        'small closed group that is often the simpler route, and it is the one a production build ' +
-        'should keep even after email works.</p>' +
-    '</div>';
-
-    var f = document.getElementById('resetReqForm');
-    f.addEventListener('submit', function (e) {
-      e.preventDefault();
-      ui.clearAllErrors(f);
-      var email = f.elements.email.value.trim();
-      if (!ui.isEmail(email)) { ui.fieldError(f.elements.email, 'Enter a valid email address.'); return; }
-
-      var issued = store.requestPasswordReset(email);
-      var out = document.getElementById('resetOut');
-
-      /* NOTE ON WORDING. A real backend answers "if an account exists, we have
-         emailed it" either way, so the form cannot be used to discover which
-         addresses are registered. That answer would be a lie here: nothing is
-         emailed, and displaying the link reveals whether the account exists
-         regardless — the anti-enumeration property cannot survive showing the
-         token on screen. So the UI says what actually happened. The neutral
-         code path is still what store.requestPasswordReset() implements, and
-         it is what a real backend keeps; only the message differs. */
-
-      if (!issued) {
-        out.innerHTML = ui.notice('info', 'No account found for that address',
-          'Nothing matches <strong>' + esc(email) + '</strong> in this browser. Accounts in this ' +
-          'build live in this browser\'s <code>localStorage</code> and do not travel between ' +
-          'browsers, devices or private windows — an account created elsewhere will not be found ' +
-          'here. You can <a href="#/register">create an account</a>, or sign in with a seeded demo ' +
-          'account (password <code>demo</code>).');
-        return;
-      }
-
-      var link = '#/reset?token=' + encodeURIComponent(issued.token);
-      out.innerHTML =
-        '<div class="notice notice--warn">' +
-          '<h4>No email was sent — there is nothing to send it with</h4>' +
-          '<p>This build has no server and no mail service, so your reset link is below instead of ' +
-            'in your inbox. In a real deployment this page would say &ldquo;check your inbox&rdquo; ' +
-            'and the link would exist only in the mailbox for <strong>' + esc(email) + '</strong>.</p>' +
-          '<p>The link can be used once and expires in 30 minutes.</p>' +
-          '<p class="mb-0"><a class="btn btn--primary btn--sm" href="' + esc(link) + '">' +
-            'Open the reset link</a></p>' +
-        '</div>';
-    });
-  }
-
-  /* --- step 2: spend the token and set a new password --- */
-  function resetWithToken(ctx, token) {
-    var found = store.userByResetToken(token);
-
-    if (!found) {
-      ctx.el.innerHTML = '<div class="wrap wrap--620">' +
-        '<h1>This reset link is not valid</h1>' +
-        ui.notice('danger', 'Unrecognised or already-used link',
-          'Reset links can be used once. Request a new one from the ' +
-          '<a href="#/reset">password reset page</a>.') + '</div>';
-      return;
-    }
-    if (found.expired) {
-      ctx.el.innerHTML = '<div class="wrap wrap--620">' +
-        '<h1>This reset link has expired</h1>' +
-        ui.notice('warn', 'Links are valid for 30 minutes',
-          'Request a fresh one from the <a href="#/reset">password reset page</a>.') + '</div>';
-      return;
-    }
-
-    var u = found.user;
-    ctx.el.innerHTML =
-    '<div class="wrap wrap--620">' +
-      '<h1>Choose a new password</h1>' +
-      '<p class="lede">Setting a new password for <strong>' + esc(u.email) + '</strong>.</p>' +
-      ui.notice('warn', 'Stored in plain text',
-        'This demonstration build keeps passwords unhashed in <code>localStorage</code>. ' +
-        'Do not reuse a password you use anywhere else.') +
-      '<form class="card" id="resetSetForm" novalidate>' +
-        '<div class="field"><label for="npw">New password <span class="req">*</span></label>' +
-          '<input type="password" id="npw" name="password" autocomplete="new-password" required>' +
-          '<p class="field__hint">Minimum 4 characters.</p></div>' +
-        '<div class="field"><label for="npw2">Confirm new password <span class="req">*</span></label>' +
-          '<input type="password" id="npw2" name="confirm" autocomplete="new-password" required></div>' +
-        '<div class="btn-row"><button class="btn btn--primary" type="submit">Set password and sign in</button>' +
-          '<a class="btn btn--ghost" href="#/signin">Cancel</a></div>' +
-      '</form>' +
-    '</div>';
-
-    var f = document.getElementById('resetSetForm');
-    f.addEventListener('submit', function (e) {
-      e.preventDefault();
-      ui.clearAllErrors(f);
-      var pw = f.elements.password.value, pw2 = f.elements.confirm.value;
-      var ok = true;
-      if (pw.length < 4) { ui.fieldError(f.elements.password, 'Use at least 4 characters.'); ok = false; }
-      if (pw !== pw2) { ui.fieldError(f.elements.confirm, 'The two passwords do not match.'); ok = false; }
-      if (!ok) { ui.focusFirstError(f); return; }
-
-      /* Re-check the token at spend time: it may have expired or been used
-         while this form sat open. */
-      var still = store.userByResetToken(token);
-      if (!still || still.expired) {
-        ui.toast('That reset link is no longer valid. Request a new one.', 'err');
-        router.navigate('#/reset');
-        return;
-      }
-
-      store.completePasswordReset(still.user.id, pw);
-      auth.signIn(still.user.email, pw);
-      ui.toast('Password updated. You are signed in.', 'good');
-      router.navigate(auth.isSupervisor() ? '#/dashboard' : '#/me');
-    });
-  }
-
-  /* ---------------- register ---------------- */
+  /* ---------------- where registration used to be ---------------- */
 
   function register(ctx) {
-    if (auth.isAuthenticated()) {
-      ctx.el.innerHTML = '<div class="wrap">' +
-        ui.notice('info', 'You are already signed in',
-          'Sign out first if you need to create a different account. <a href="#/me">Go to your profile</a>.') +
-        '</div>';
-      return;
-    }
-
-    var sup = store.userById(store.SUPERVISOR_ID);
-
     ctx.el.innerHTML =
-    '<div class="wrap wrap--840">' +
+    '<div class="wrap wrap--680">' +
       '<p class="eyebrow">Researcher registration</p>' +
-      '<h1>Create a researcher profile</h1>' +
-      '<p class="lede">For interns and student researchers undertaking a supervised research period ' +
-        'with Prof. Bernard Foing. Fields marked <span class="req">*</span> are required.</p>' +
-
-      ui.notice('warn', 'Demonstration registration',
-        'The account you create is stored in this browser only and is visible to anyone using this browser. ' +
-        'Do not enter real personal data.') +
-
-      '<form id="regForm" novalidate>' +
-        '<fieldset><legend>Identity</legend>' +
-          '<div class="field"><label for="rName">Full name <span class="req">*</span></label>' +
-            '<input type="text" id="rName" name="fullName" autocomplete="name" required></div>' +
-          '<div class="field"><label for="rEmail">Institutional email address <span class="req">*</span></label>' +
-            '<input type="email" id="rEmail" name="email" autocomplete="email" required>' +
-            '<p class="field__hint">Used as your sign-in identifier. Never shown to other researchers.</p></div>' +
-          '<div class="field"><label for="rPass">Password <span class="req">*</span></label>' +
-            '<input type="password" id="rPass" name="password" autocomplete="new-password" required>' +
-            '<p class="field__hint">Minimum 4 characters. Stored in plain text in this demonstration build.</p></div>' +
-        '</fieldset>' +
-
-        '<fieldset><legend>Affiliation &amp; research period</legend>' +
-          '<div class="field-row">' +
-            '<div class="field"><label for="rInst">Home university or institution <span class="req">*</span></label>' +
-              '<input type="text" id="rInst" name="institution" list="instList" required ' +
-              'placeholder="e.g. International Space University">' +
-              '<datalist id="instList">' +
-                store.INSTITUTIONS.map(function (i) { return '<option value="' + esc(i) + '"></option>'; }).join('') +
-              '</datalist>' +
-              '<p class="field__hint">Free text — any institution; suggestions help keep spellings consistent.</p></div>' +
-            '<div class="field"><label for="rProg">Programme or course</label>' +
-              '<input type="text" id="rProg" name="programme" placeholder="e.g. MSc Space Studies"></div>' +
-          '</div>' +
-          '<div class="field"><label for="rSup">Supervisor</label>' +
-            '<select id="rSup" disabled><option>' + esc(sup ? sup.fullName : 'Prof. Bernard Foing') + '</option></select>' +
-            '<p class="field__hint">This hub instance is dedicated to Prof. Foing\'s research group, so the ' +
-              'supervisor is fixed. Co-supervisors are designated by the supervisor after registration.</p></div>' +
-          '<div class="field-row">' +
-            '<div class="field"><label for="rStart">Research period — start <span class="req">*</span></label>' +
-              '<input type="date" id="rStart" name="startDate" required></div>' +
-            '<div class="field"><label for="rEnd">Research period — end</label>' +
-              '<input type="date" id="rEnd" name="endDate">' +
-              '<p class="field__hint">Leave blank if open-ended.</p></div>' +
-          '</div>' +
-        '</fieldset>' +
-
-        '<fieldset><legend>Research</legend>' +
-          '<div class="field"><label for="rTopic">Research topic <span class="req">*</span></label>' +
-            '<input type="text" id="rTopic" name="researchTopic" required ' +
-            'placeholder="e.g. Lunar regolith geotechnics"></div>' +
-          '<div class="field"><label for="rKw">Keywords</label>' +
-            '<input type="text" id="rKw" name="keywords" placeholder="regolith, ISRU, south pole">' +
-            '<p class="field__hint">Comma-separated.</p>' +
-            ui.keywordChips(store.suggestedKeywords()) + '</div>' +
-          '<div class="field"><label for="rBio">Short biography</label>' +
-            '<textarea id="rBio" name="bio" rows="4" ' +
-            'placeholder="A few sentences on your background and what you are working on."></textarea></div>' +
-        '</fieldset>' +
-
-        '<fieldset><legend>Optional</legend>' +
-          '<div class="field"><label for="rPhoto">Photograph URL</label>' +
-            '<input type="url" id="rPhoto" name="photoUrl" placeholder="https://…">' +
-            '<p class="field__hint">A link is used rather than an upload so that images are not written to browser storage.</p></div>' +
-          '<div class="field-row">' +
-            '<div class="field"><label for="rLi">LinkedIn</label><input type="url" id="rLi" name="linkedin" placeholder="https://www.linkedin.com/in/…"></div>' +
-            '<div class="field"><label for="rOr">ORCID</label><input type="text" id="rOr" name="orcid" placeholder="0000-0000-0000-0000"></div>' +
-            '<div class="field"><label for="rWeb">Personal site or portfolio</label><input type="url" id="rWeb" name="website" placeholder="https://…"></div>' +
-          '</div>' +
-          ui.notice('info', 'Who can see this',
-            'This hub is closed. Your profile and your reports are visible only to you and to ' +
-            'Prof. Foing until he approves a report — approved work is then shared with the rest ' +
-            'of the research group. Your email address and research-period dates are never shown ' +
-            'to other researchers, and nothing here is published publicly.') +
-        '</fieldset>' +
-
-        '<div class="btn-row"><button class="btn btn--primary" type="submit">Create profile</button>' +
-          '<a class="btn btn--ghost" href="#/signin">I already have an account</a></div>' +
-      '</form>' +
+      '<h1>Accounts are issued, not applied for</h1>' +
+      ui.notice('info', 'This hub is closed',
+        'It is a working tool for researchers already placed with Prof. Foing — not a ' +
+        'recruitment channel. Prof. Foing creates your account from the supervisor dashboard ' +
+        'and gives you the password directly. If you are expecting access and have not ' +
+        'received it, contact your supervisor.') +
+      '<div class="btn-row mt-20">' +
+        '<a class="btn btn--primary" href="#/signin">Back to sign in</a>' +
+        '<a class="btn btn--ghost" href="#/access">How access works</a>' +
+      '</div>' +
     '</div>';
-
-    var form = document.getElementById('regForm');
-    ui.wireKeywordChips(form, form.elements.keywords);
-    form.addEventListener('submit', function (e) {
-      e.preventDefault();
-      ui.clearAllErrors(form);
-      var ok = true;
-      function req(name, msg) {
-        var el = form.elements[name];
-        if (!el.value.trim()) { ui.fieldError(el, msg); ok = false; }
-        return el;
-      }
-      req('fullName', 'Enter your full name.');
-      var emailEl = req('email', 'Enter your institutional email address.');
-      if (emailEl.value.trim() && !ui.isEmail(emailEl.value)) { ui.fieldError(emailEl, 'That does not look like a valid email address.'); ok = false; }
-      else if (emailEl.value.trim() && store.userByEmail(emailEl.value)) { ui.fieldError(emailEl, 'An account already exists for that email address.'); ok = false; }
-      if (form.elements.password.value.length < 4) { ui.fieldError(form.elements.password, 'Use at least 4 characters.'); ok = false; }
-      req('institution', 'Enter your home university or institution.');
-      req('startDate', 'Enter the start date of your research period.');
-      req('researchTopic', 'Enter your research topic.');
-      if (form.elements.startDate.value && form.elements.endDate.value && form.elements.endDate.value < form.elements.startDate.value) {
-        ui.fieldError(form.elements.endDate, 'The end date cannot precede the start date.'); ok = false;
-      }
-      if (!ok) { ui.focusFirstError(form); return; }
-
-      var u = store.addUser({
-        role: 'intern',
-        fullName: form.elements.fullName.value.trim(),
-        email: form.elements.email.value.trim(),
-        password: form.elements.password.value,
-        institution: store.canonicalInstitution(form.elements.institution.value),
-        programme: form.elements.programme.value.trim(),
-        supervisorId: store.SUPERVISOR_ID,
-        startDate: form.elements.startDate.value,
-        endDate: form.elements.endDate.value,
-        researchTopic: form.elements.researchTopic.value.trim(),
-        keywords: store.canonicalKeywords(ui.parseList(form.elements.keywords.value)),
-        bio: form.elements.bio.value.trim(),
-        photoUrl: ui.safeUrl(form.elements.photoUrl.value),
-        links: {
-          linkedin: ui.safeUrl(form.elements.linkedin.value),
-          orcid: form.elements.orcid.value.trim(),
-          website: ui.safeUrl(form.elements.website.value)
-        },
-        standing: 'active'
-      });
-
-      auth.assume(u.id);
-      ui.toast('Profile created. You can now submit reports.', 'good');
-      router.navigate('#/me');
-    });
   }
 
-  /* ---------------- denied ---------------- */
+  /* ---------------- where self-service reset used to be ---------------- */
+
+  function reset(ctx) {
+    ctx.el.innerHTML =
+    '<div class="wrap wrap--680">' +
+      '<p class="eyebrow">Password reset</p>' +
+      '<h1>Ask Prof. Foing for a new password</h1>' +
+      ui.notice('info', 'There is no self-service reset',
+        'A reset link has to be emailed to prove you control the mailbox, and this deployment ' +
+        'has no mail service. Prof. Foing can issue a replacement from your researcher profile ' +
+        'and hand it over directly. Change it from your own profile page once you are signed in.') +
+      '<div class="btn-row mt-20">' +
+        '<a class="btn btn--primary" href="#/signin">Back to sign in</a>' +
+      '</div>' +
+    '</div>';
+  }
+
+  /* ---------------- access denied ---------------- */
 
   function denied(ctx) {
     var u = auth.user();
@@ -425,7 +137,7 @@
         (u ? '<a class="btn" href="#/me">My profile</a>' : '<a class="btn" href="#/signin">Sign in</a>') +
       '</div>' +
       '<hr><p class="meta">The rules that produced this decision are listed on the ' +
-      '<a href="#/about-demo">access-control page</a>.</p>' +
+      '<a href="#/access">access-control page</a>.</p>' +
     '</div>';
   }
 

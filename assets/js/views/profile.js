@@ -14,6 +14,7 @@
   'use strict';
 
   var ESH = global.ESH, ui = ESH.ui, store = ESH.store, auth = ESH.auth, router = ESH.router;
+  var MIN_PW = global.ESHPolicy.MIN_PASSWORD_LENGTH;
   var esc = ui.esc;
 
   /* Build an activity log for one researcher from report history + account events. */
@@ -150,9 +151,6 @@
       return;
     }
 
-    /* Prof. Foing's own record is the hub landing page, not a generic profile. */
-    if (target.id === store.SUPERVISOR_ID) { router.navigate('#/', true); return; }
-
     var full = auth.can('user:readFull', target, viewer);
     var isSelf = !!viewer && viewer.id === target.id;
     var isSup = auth.isSupervisor();
@@ -261,13 +259,19 @@
           'This immediately replaces ' + target.fullName + '’s current password. They will not be ' +
           'able to sign in until you give them the new one. It is shown to you once.',
           'Issue password', function () {
-            var temp = store.issueTemporaryPassword(target.id);
-            document.getElementById('tempPwOut').innerHTML =
-              '<div class="notice notice--warn mt-12"><h4>Temporary password</h4>' +
-              '<p class="mb-0"><code class="fs-105">' + esc(temp) + '</code></p>' +
-              '<p class="meta mt-8 mb-0">Give this to the researcher directly. It is not ' +
-              'shown again — reissue if you lose it, and ask them to change it once signed in.</p></div>';
-            ui.toast('Temporary password issued.', 'good');
+            var out = document.getElementById('tempPwOut');
+            store.issueTemporaryPassword(target.id).then(function (temp) {
+              if (!temp) throw new Error('The password could not be issued.');
+              out.innerHTML =
+                '<div class="notice notice--warn mt-12"><h4>Temporary password</h4>' +
+                '<p class="mb-0"><code class="fs-105">' + esc(temp) + '</code></p>' +
+                '<p class="meta mt-8 mb-0">Give this to the researcher directly. It is not ' +
+                'shown again — reissue if you lose it, and ask them to change it once signed in.</p></div>';
+              ui.toast('Temporary password issued.', 'good');
+            })['catch'](function (err) {
+              out.innerHTML = '<div class="notice notice--err mt-12"><p class="mb-0">' +
+                esc(err.message || 'The password could not be issued.') + '</p></div>';
+            });
           }, true);
       });
     }
@@ -357,9 +361,12 @@
         '<div class="btn-row"><button class="btn btn--primary" type="submit">Save changes</button>' +
           '<a class="btn btn--ghost" href="#/researcher/' + esc(target.id) + '">Cancel</a></div>' +
       '</form>' +
+
+      passwordSection(target, viewer) +
     '</div>';
 
     var form = document.getElementById('profForm');
+    wirePassword(target, viewer);
     ui.wireKeywordChips(form, form.elements.keywords);
     form.addEventListener('submit', function (e) {
       e.preventDefault();
@@ -396,6 +403,78 @@
       auth.refresh();
       ui.toast('Profile updated.', 'good');
       router.navigate('#/researcher/' + target.id);
+    });
+  }
+
+  /* ---------------- change your own password ----------------
+     Own account only: `user:edit` lets a supervisor edit an intern's profile,
+     but changing someone's password is not editing their profile — the
+     supervisor's route is the temporary password on the profile page, which
+     leaves an auditable act rather than a silent takeover. */
+
+  function canChangeOwnPassword(target, viewer) {
+    return !!viewer && viewer.id === target.id;
+  }
+
+  function passwordSection(target, viewer) {
+    if (!canChangeOwnPassword(target, viewer)) return '';
+    return '' +
+    '<form id="pwForm" class="card mt-26" novalidate>' +
+      '<h3>Change your password</h3>' +
+      '<p class="meta">If you signed in with a password Prof. Foing handed you, replace it here. ' +
+        'Changing it signs out every other session on your account.</p>' +
+      '<div class="field mt-14"><label for="pwCur">Current password <span class="req">*</span></label>' +
+        '<input type="password" id="pwCur" name="currentPassword" autocomplete="current-password" required></div>' +
+      '<div class="field"><label for="pwNew">New password <span class="req">*</span></label>' +
+        '<input type="password" id="pwNew" name="newPassword" autocomplete="new-password" required>' +
+        '<p class="field__hint">At least ' + MIN_PW + ' characters.</p></div>' +
+      '<div class="field"><label for="pwCon">Confirm new password <span class="req">*</span></label>' +
+        '<input type="password" id="pwCon" name="confirmPassword" autocomplete="new-password" required></div>' +
+      '<div class="btn-row"><button class="btn btn--primary" type="submit">Change password</button></div>' +
+      '<p id="pwErr" class="field__err" hidden></p>' +
+    '</form>';
+  }
+
+  function wirePassword(target, viewer) {
+    if (!canChangeOwnPassword(target, viewer)) return;
+    var form = document.getElementById('pwForm');
+    if (!form) return;
+    var errEl = document.getElementById('pwErr');
+
+    form.addEventListener('submit', function (e) {
+      e.preventDefault();
+      errEl.hidden = true;
+      ui.clearAllErrors(form);
+
+      var cur = form.elements.currentPassword.value;
+      var next = form.elements.newPassword.value;
+      var confirm = form.elements.confirmPassword.value;
+      var ok = true;
+
+      if (!cur) { ui.fieldError(form.elements.currentPassword, 'Enter your current password.'); ok = false; }
+      if (next.length < MIN_PW) { ui.fieldError(form.elements.newPassword, 'Use at least ' + MIN_PW + ' characters.'); ok = false; }
+      if (next && next === cur) { ui.fieldError(form.elements.newPassword, 'Choose a password you have not used here before.'); ok = false; }
+      if (next !== confirm) { ui.fieldError(form.elements.confirmPassword, 'The two passwords do not match.'); ok = false; }
+      if (!ok) { ui.focusFirstError(form); return; }
+
+      var btn = form.querySelector('button[type=submit]');
+      btn.disabled = true;
+      ESH.api.changePassword(cur, next).then(function (res) {
+        btn.disabled = false;
+        if (!res.ok) {
+          errEl.hidden = false;
+          errEl.textContent = res.error || 'The password could not be changed.';
+          return;
+        }
+        form.reset();
+        /* The server drops every session for this user and issues a fresh one
+           for the caller, so this tab stays signed in and the others do not. */
+        ui.toast('Password changed. Any other sessions have been signed out.', 'good');
+      })['catch'](function (err) {
+        btn.disabled = false;
+        errEl.hidden = false;
+        errEl.textContent = err.message || 'The password could not be changed.';
+      });
     });
   }
 
