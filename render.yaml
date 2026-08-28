@@ -1,18 +1,21 @@
-# Render Blueprint — the most turnkey way to deploy this.
+# Render Blueprint — a free way to get this running.
 #
 # On render.com: New → Blueprint → connect this repo. Render reads this file,
-# builds the Dockerfile, and provisions a persistent disk for the database.
-# The secret env vars below (sync: false) are NOT in the repo — you enter them
-# in the Render dashboard on first deploy.
+# builds the Dockerfile, and runs it. No credit card is required for a free web
+# service. Secret env vars (sync: false) are entered in the Render dashboard.
 #
-# A persistent disk is what makes the SQLite database survive restarts. Render's
-# free instance type does not include a disk, so this needs a paid instance
-# (check current pricing) — or use a host with a free volume (e.g. Fly.io) with
-# the same Dockerfile.
+# ⚠️ DATA DURABILITY: the free instance has an EPHEMERAL filesystem — the SQLite
+# database is wiped on every restart, redeploy, or idle spin-down. That is fine
+# to SHOW the app working; it is not fine for keeping real reports. Two ways to
+# make data durable (see DEPLOY.md):
+#   - add a persistent disk  (Render paid instance), or
+#   - replicate SQLite to your B2 bucket with Litestream  (free — ask me to wire
+#     it in).
 services:
   - type: web
     name: eurospacehub
     runtime: docker
+    plan: free
     dockerfilePath: ./Dockerfile
     healthCheckPath: /api/health
     envVars:
@@ -39,7 +42,3 @@ services:
         sync: false
       - key: SEED_SUPERVISOR_EMAIL
         sync: false
-    disk:
-      name: data
-      mountPath: /data
-      sizeGB: 1
