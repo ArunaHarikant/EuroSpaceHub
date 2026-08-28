@@ -49,10 +49,13 @@
   function form(ctx, existing) {
     var viewer = auth.user();
     var isEdit = !!existing;
+    /* A new record defaults to a weekly: it is by far the most common thing
+       submitted, and the type select changes it in one click. The visibility
+       control therefore renders visible on first paint (it is weekly-only). */
     var r = existing || {
-      title: '', missionArea: 'Lunar', reportType: 'Research paper', abstract: '',
+      title: '', missionArea: 'Lunar', reportType: store.WEEKLY_TYPE, abstract: '',
       keywords: [], coAuthors: [], supplementary: [], dataAvailability: '',
-      status: 'draft', file: null
+      status: 'draft', file: null, visibility: 'private'
     };
     var owner = isEdit ? store.userById(r.ownerId) : viewer;
     var selectedIds = (r.coAuthors || []).map(function (c) { return c.userId; }).filter(Boolean);
@@ -68,9 +71,14 @@
         (isEdit ? '<a href="#/report/' + esc(r.id) + '">&larr; Back to the record</a>'
                 : '<a href="#/me">&larr; Back to my profile</a>') + '</p>' +
       '<p class="eyebrow">' + (isEdit ? 'Edit submission' : 'New submission') + '</p>' +
-      '<h1>' + (isEdit ? 'Edit research report' : 'Submit a research report') + '</h1>' +
-      '<p class="lede">Records are reviewed by Prof. Bernard Foing. Only approved records are ' +
-        'shared with the rest of the research group.</p>' +
+      '<h1>' + (isEdit ? 'Edit report' : 'Submit a report') + '</h1>' +
+      /* The two models differ, so the lede states both rather than the formal
+         one only — which stopped being the default when weeklies arrived. */
+      '<p class="lede">Prof. Bernard Foing reviews everything submitted here. ' +
+        '<strong>Weekly reports</strong> are shared with the group when <em>you</em> choose to share ' +
+        'them; <strong>formal reports</strong> reach the library once he approves them.</p>' +
+      '<p class="meta mb-20">Just posting a weekly update? The ' +
+        '<a href="#/submit-weekly">quick form</a> is shorter.</p>' +
 
       (isEdit
         ? ui.notice(r.status === 'revisions' ? 'warn' : 'info',
@@ -95,10 +103,13 @@
             '<div class="field"><label for="sType">Report type <span class="req">*</span></label>' +
               '<select id="sType" name="reportType">' + ui.selectOptions(store.REPORT_TYPES, r.reportType) + '</select></div>' +
           '</div>' +
-          '<div class="field"><label for="sAbs">Abstract <span class="req">*</span></label>' +
+          '<div class="field"><label for="sAbs"><span id="absLabel">' +
+              (weekly ? 'This week' : 'Abstract') + '</span> <span class="req">*</span></label>' +
             '<textarea id="sAbs" name="abstract" rows="9" required>' + esc(r.abstract) + '</textarea>' +
-            '<p class="field__hint">Target approximately ' + ABSTRACT_TARGET + ' words; hard limit ' + ABSTRACT_MAX + '. ' +
-              '<span id="absCount" class="tnum"></span></p></div>' +
+            '<p class="field__hint"><span id="absGuide">' +
+              (weekly ? 'What you did, what you found, what is next.'
+                      : 'Target approximately ' + ABSTRACT_TARGET + ' words; hard limit ' + ABSTRACT_MAX + '.') +
+              '</span> <span id="absCount" class="tnum"></span></p></div>' +
           '<div class="field"><label for="sKw">Keywords</label>' +
             '<input type="text" id="sKw" name="keywords" value="' + esc((r.keywords || []).join(', ')) + '" ' +
             'placeholder="regolith, ISRU, south pole"><p class="field__hint">Comma-separated. Used by the library filters.</p>' +
@@ -214,11 +225,19 @@
       document.getElementById('suppRows').insertAdjacentHTML('beforeend', suppRow({ label: '', url: '' }, suppIdx++));
     });
 
-    /* The visibility control belongs to weeklies only; reveal it live when the
-       type changes, without re-rendering the form. */
+    /* The visibility control belongs to weeklies only, and the body field is
+       framed differently for one. Both follow the type live, without
+       re-rendering the form. */
     var visField = document.getElementById('visibilityField');
+    var absLabel = document.getElementById('absLabel');
+    var absGuide = document.getElementById('absGuide');
     f.elements.reportType.addEventListener('change', function () {
-      visField.hidden = f.elements.reportType.value !== store.WEEKLY_TYPE;
+      var isW = f.elements.reportType.value === store.WEEKLY_TYPE;
+      visField.hidden = !isW;
+      absLabel.textContent = isW ? 'This week' : 'Abstract';
+      absGuide.textContent = isW
+        ? 'What you did, what you found, what is next.'
+        : 'Target approximately ' + ABSTRACT_TARGET + ' words; hard limit ' + ABSTRACT_MAX + '.';
     });
 
     f.querySelectorAll('button[type=submit]').forEach(function (b) {

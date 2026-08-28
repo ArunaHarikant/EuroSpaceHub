@@ -599,6 +599,27 @@ if (qid) {
   ok('the edit persists', j.report.title === 'QUICKWEEKLY-MARKER Week 9 (edited)');
 }
 
+/* The FULL submit form defaults to a weekly, with the visibility control
+   already visible and the body field framed for a weekly. Switching the type
+   swaps both back without a re-render. */
+await signInAs('b@test.local');
+goto('#/submit');
+const ff = window.document.getElementById('repForm');
+ok('the full submit form renders', !!ff);
+if (ff) {
+  ok('a new report defaults to Weekly report', ff.elements.reportType.value === 'Weekly report');
+  const vf = window.document.getElementById('visibilityField');
+  ok('the visibility control is visible on first paint', !!vf && !vf.hidden);
+  ok('the body field is framed for a weekly',
+    window.document.getElementById('absLabel').textContent === 'This week');
+
+  ff.elements.reportType.value = 'Research paper';
+  ff.elements.reportType.dispatchEvent(new window.Event('change'));
+  ok('switching to a formal type hides visibility', vf.hidden);
+  ok('and reframes the body field as an abstract',
+    window.document.getElementById('absLabel').textContent === 'Abstract');
+}
+
 /* The all-clear state exists when the review queue empties. */
 await signInAs('sup@test.local');
 goto('#/dashboard?bucket=action&intern=u_cosup');   /* a researcher with no queued work */
