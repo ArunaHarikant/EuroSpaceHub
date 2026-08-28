@@ -443,12 +443,21 @@
         '<span class="meta fb-100">Transitions that are not legal for a selected record are skipped and reported.</span>' +
       '</div>' +
 
+      /* All clear: the needs-my-action queue is empty. */
+      (f.bucket === 'action' && !rows.length
+        ? ui.notice('good', 'All clear',
+            'Nothing is waiting on you — every submitted report and every weekly has been reviewed. ' +
+            '<a href="#/dashboard">See all reports</a>.')
+        : '') +
+
       '<p class="meta mb-10" role="status">' +
         (rows.length
           ? 'Showing <strong>' + ((page - 1) * PAGE_SIZE + 1) + '–' + Math.min(page * PAGE_SIZE, rows.length) +
             '</strong> of ' + rows.length + ' matching' +
             (rows.length !== reports.length ? ' (of ' + reports.length + ' total)' : '') + '.'
-          : '0 of ' + reports.length + ' records match these filters.') +
+          : f.bucket === 'action'
+            ? 'Your review queue is empty.'
+            : '0 of ' + reports.length + ' records match these filters.') +
       '</p>' +
 
       '<div class="tablewrap"><table class="data"><thead><tr>' +

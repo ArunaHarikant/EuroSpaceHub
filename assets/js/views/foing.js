@@ -48,10 +48,11 @@
       return '' +
       '<section class="section"><div class="card">' +
         '<h2>Your work</h2>' +
-        '<p class="lede">Submit a report, track it through review, and read the work your ' +
-          'colleagues have had approved.</p>' +
+        '<p class="lede">Post a weekly update, submit a full report, track it through review, and ' +
+          'read the work your colleagues have shared.</p>' +
         '<div class="btn-row">' +
-          '<a class="btn btn--primary" href="#/submit">Submit a report</a>' +
+          '<a class="btn btn--primary" href="#/submit-weekly">Quick-submit a weekly</a>' +
+          '<a class="btn" href="#/submit">Submit a report</a>' +
           '<a class="btn" href="#/me">My profile</a>' +
           '<a class="btn" href="#/library">Report library</a>' +
         '</div>' +

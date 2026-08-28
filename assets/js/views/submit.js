@@ -232,9 +232,11 @@
 
       if (!f.elements.title.value.trim()) { ui.fieldError(f.elements.title, 'Enter a title.'); ok = false; }
       var absText = abs.value.trim();
+      var isWeekly = f.elements.reportType.value === store.WEEKLY_TYPE;
       if (!absText) { ui.fieldError(abs, 'An abstract is required.'); ok = false; }
       else if (ui.wordCount(absText) > ABSTRACT_MAX) { ui.fieldError(abs, 'The abstract exceeds ' + ABSTRACT_MAX + ' words.'); ok = false; }
-      else if (intent === 'submit' && ui.wordCount(absText) < 40) {
+      else if (!isWeekly && intent === 'submit' && ui.wordCount(absText) < 40) {
+        /* Weeklies are meant to be short — the 40-word floor is for formal work. */
         ui.fieldError(abs, 'Expand the abstract before submitting for review (at least 40 words).'); ok = false;
       }
 
@@ -356,12 +358,107 @@
     }).catch(fail);
   }
 
+  /* ==========================================================================
+     Quick-submit — a trimmed form for a weekly report: title, week/period,
+     a short body, and visibility. It creates a 'Weekly report' record and runs
+     the SAME save pipeline (saveViaApi) as the full form; the full form remains
+     available for anyone who wants files, co-authors or supplementary links.
+     Week/period is stored in the campaign field, which already groups related
+     work in the library.
+     ========================================================================== */
+  function weeklyForm(ctx) {
+    ctx.el.innerHTML =
+    '<div class="wrap wrap--680">' +
+      '<p class="meta mb-10"><a href="#/me">&larr; Back to my profile</a></p>' +
+      '<p class="eyebrow">Weekly report</p>' +
+      '<h1>Quick-submit a weekly</h1>' +
+      '<p class="lede">A short update for the group. Need files, co-authors or a full abstract? ' +
+        'Use the <a href="#/submit">full submission form</a> instead.</p>' +
+
+      '<form id="repForm" novalidate>' +
+        '<div class="field"><label for="sTitle">Title <span class="req">*</span></label>' +
+          '<input type="text" id="sTitle" name="title" placeholder="e.g. Regolith sampling — first results" required></div>' +
+        '<div class="field"><label for="sCampaign">Week / period</label>' +
+          '<input type="text" id="sCampaign" name="campaign" list="campaignList" ' +
+            'placeholder="Optional — e.g. Week 5, or May 2026">' +
+          '<datalist id="campaignList">' +
+            store.CAMPAIGNS.map(function (c) { return '<option value="' + esc(c) + '"></option>'; }).join('') +
+          '</datalist>' +
+          '<p class="field__hint">Groups related weeklies together in the library.</p></div>' +
+        '<div class="field"><label for="sAbs">This week <span class="req">*</span></label>' +
+          '<textarea id="sAbs" name="abstract" rows="6" required ' +
+            'placeholder="What you did, what you found, what is next."></textarea>' +
+          '<p class="field__hint"><span id="absCount" class="tnum"></span> — up to ' + ABSTRACT_MAX + ' words.</p></div>' +
+        '<div class="field"><span class="field__label">Who can see this weekly</span>' +
+          '<label class="checkline"><input type="radio" name="visibility" value="private" checked>' +
+            '<span>Private — only you and Prof. Foing</span></label>' +
+          '<label class="checkline"><input type="radio" name="visibility" value="shared">' +
+            '<span>Share with the group — everyone signed in can read it</span></label>' +
+          '<p class="field__hint">You can change this anytime.</p></div>' +
+
+        '<div class="card bg-1">' +
+          '<div class="btn-row">' +
+            '<button class="btn" type="submit" name="intent" value="save">Save as draft</button>' +
+            '<button class="btn btn--primary" type="submit" name="intent" value="submit">Submit to Prof. Foing</button>' +
+            '<a class="btn btn--ghost" href="#/me">Cancel</a>' +
+          '</div>' +
+          '<p class="field__hint" id="uploadProgress" hidden role="status"></p>' +
+        '</div>' +
+      '</form>' +
+    '</div>';
+
+    var f = document.getElementById('repForm');
+    var abs = document.getElementById('sAbs');
+    var count = document.getElementById('absCount');
+    var intent = 'save';
+
+    function updateCount() {
+      var n = ui.wordCount(abs.value);
+      count.textContent = n + ' word' + (n === 1 ? '' : 's');
+      count.style.color = n > ABSTRACT_MAX ? '#ff9b9b' : 'var(--ink-3)';
+    }
+    abs.addEventListener('input', updateCount);
+    updateCount();
+
+    f.querySelectorAll('button[type=submit]').forEach(function (b) {
+      b.addEventListener('click', function () { intent = b.value; });
+    });
+
+    f.addEventListener('submit', function (e) {
+      e.preventDefault();
+      ui.clearAllErrors(f);
+      var ok = true;
+      if (!f.elements.title.value.trim()) { ui.fieldError(f.elements.title, 'Enter a title.'); ok = false; }
+      var absText = abs.value.trim();
+      if (!absText) { ui.fieldError(abs, 'Write a short update.'); ok = false; }
+      else if (ui.wordCount(absText) > ABSTRACT_MAX) {
+        ui.fieldError(abs, 'That is over ' + ABSTRACT_MAX + ' words — trim it, or use the full form.'); ok = false;
+      }
+      if (!ok) { ui.focusFirstError(f); return; }
+
+      var patch = {
+        title: f.elements.title.value.trim(),
+        reportType: store.WEEKLY_TYPE,
+        campaign: store.canonicalCampaign(f.elements.campaign.value),
+        abstract: absText,
+        keywords: [], coAuthors: [], supplementary: [], dataAvailability: ''
+      };
+      saveViaApi(patch, null, false, intent, null, f, true, f.elements.visibility.value);
+    });
+  }
+
   /* ---------------- entry points ---------------- */
 
   function create(ctx) {
     var viewer = auth.user();
     if (!auth.can('report:create', null, viewer)) { router.navigate('#/denied', true); return; }
     form(ctx, null);
+  }
+
+  function weeklyCreate(ctx) {
+    var viewer = auth.user();
+    if (!auth.can('report:create', null, viewer)) { router.navigate('#/denied', true); return; }
+    weeklyForm(ctx);
   }
 
   function editReport(ctx) {
@@ -384,6 +481,7 @@
 
   ESH.views = ESH.views || {};
   ESH.views.submit = create;
+  ESH.views.weeklySubmit = weeklyCreate;
   ESH.views.reportEdit = editReport;
 
 })(window);

@@ -146,8 +146,8 @@ async function waitFor(pred, timeoutMs = 8000, stepMs = 20) {
 }
 
 const IGNORED = /Not implemented: Window's (scrollTo|scroll|scrollBy)/;
-const REQUIRED_VIEWS = ['foing', 'library', 'report', 'reportEdit', 'submit', 'profile',
-                        'profileEdit', 'me', 'inbox', 'dashboard', 'signin', 'register',
+const REQUIRED_VIEWS = ['foing', 'library', 'report', 'reportEdit', 'submit', 'weeklySubmit',
+                        'profile', 'profileEdit', 'me', 'inbox', 'dashboard', 'signin', 'register',
                         'reset', 'accessModel', 'denied', 'notFound'];
 
 /* One jar for the whole run: signing in as somebody else replaces the cookie,
@@ -540,6 +540,70 @@ const afterEdit = await (await window.fetch('/api/reports/w_queue')).json();
 ok('an edit after review keeps the review stamp', !!afterEdit.report.reviewedAt);
 ok('the edit history says it was edited after review',
   (afterEdit.report.history || []).some((h) => h.note === 'Weekly edited after review.'));
+
+/* ================= QUICK-SUBMIT A WEEKLY (Phase 5) ================= */
+section('Weekly reports — quick submit');
+
+await signInAs('b@test.local');
+goto('#/submit-weekly');
+const qf = window.document.getElementById('repForm');
+ok('the quick-submit weekly form renders', !!qf);
+ok('it offers a visibility choice', !!(qf && qf.elements.visibility));
+
+let qid = null;
+if (qf) {
+  qf.elements.title.value = 'QUICKWEEKLY-MARKER Week 9';
+  qf.elements.abstract.value = 'Short update: measured three samples this week.';
+  /* Default visibility is private. Click the submit button (sets intent), then
+     submit the form. */
+  const submitBtn = qf.querySelector('button[value="submit"]');
+  submitBtn.click();
+  qf.dispatchEvent(new window.Event('submit', { cancelable: true, bubbles: true }));
+
+  ok('the quick weekly is created as a submitted, private weekly', await waitFor(async () => {
+    const boot = await (await window.fetch('/api/bootstrap')).json();
+    const w = (boot.reports || []).find((r) => r.title && r.title.indexOf('QUICKWEEKLY-MARKER') !== -1);
+    if (!w) return false;
+    qid = w.id;
+    return w.reportType === 'Weekly report' && w.status === 'submitted' && w.visibility === 'private';
+  }, 5000), 'server never recorded the quick weekly');
+}
+
+if (qid) {
+  /* Private: not in the library. */
+  await ESH.store.hydrate();
+  goto('#/library');
+  ok('a private quick weekly is not in the library', !/QUICKWEEKLY-MARKER/.test(text()));
+
+  /* Share it from the record page, then it appears. */
+  goto('#/report/' + qid);
+  const vt = window.document.getElementById('visToggle');
+  ok('the author gets a visibility toggle on the quick weekly', !!vt);
+  if (vt) {
+    vt.checked = true;
+    vt.dispatchEvent(new window.Event('change'));
+    ok('sharing persists to the server', await waitFor(async () => {
+      const j = await (await window.fetch('/api/reports/' + qid)).json();
+      return j.report && j.report.visibility === 'shared';
+    }, 3000));
+  }
+  await ESH.store.hydrate();
+  goto('#/library');
+  ok('a shared quick weekly now appears in the library', /QUICKWEEKLY-MARKER/.test(text()));
+
+  /* Edit it and confirm the change persists. */
+  goto('#/report/' + qid + '/edit');
+  ok('the quick weekly is editable', !!window.document.getElementById('repForm'));
+  await ESH.api.reports.update(qid, { title: 'QUICKWEEKLY-MARKER Week 9 (edited)' });
+  const j = await (await window.fetch('/api/reports/' + qid)).json();
+  ok('the edit persists', j.report.title === 'QUICKWEEKLY-MARKER Week 9 (edited)');
+}
+
+/* The all-clear state exists when the review queue empties. */
+await signInAs('sup@test.local');
+goto('#/dashboard?bucket=action&intern=u_cosup');   /* a researcher with no queued work */
+ok('an empty review queue shows an all-clear state',
+  /All clear/i.test(text()) || /review queue is empty/i.test(text()));
 
 /* ================= SIGNING OUT ================= */
 section('Signing out');
