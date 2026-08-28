@@ -252,7 +252,7 @@
     return r;
   }
 
-  /* Hard delete. In API mode the server also removes the B2 object, which the
+  /* Hard delete. The server also removes the B2 object, which the
      browser cannot do — dropping the row from the local cache alone left the
      record on the server (it returned on the next reload) and the file orphaned
      in the bucket. Async so callers can navigate only once it is really gone. */
@@ -357,9 +357,7 @@
 
   /* Async, server-first account creation. Supervisor-only on the server side.
      Resolves with { user, initialPassword } — the password is shown once and
-     is not retrievable afterwards, so the caller must display it immediately.
-     In demo mode it falls back to the local table and reports the seeded
-     password, keeping one call signature for both builds. */
+     is not retrievable afterwards, so the caller must display it immediately. */
   function createUser(patch) {
     return global.ESH.api.users.create(patch).then(function (d) {
       getState().users.push(d.user);

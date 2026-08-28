@@ -7,9 +7,10 @@
    Submitted) or after revisions are requested. The
    supervisor may correct metadata in any state.
 
-   FILE HANDLING: the chosen file is held in an in-memory blob for this tab
-   session; only its metadata is persisted. localStorage cannot hold PDFs, and
-   silently truncating or dropping uploads would be worse than saying so.
+   FILE HANDLING: the chosen file uploads straight from the browser to a private
+   Backblaze B2 bucket, through a short-lived presigned PUT the server mints. The
+   bytes never touch the app host, and the record is saved first so the file has
+   a report to belong to — see saveViaApi() below.
    ========================================================================== */
 (function (global) {
   'use strict';
@@ -247,7 +248,7 @@
         supplementary: supplementary,
         dataAvailability: f.elements.dataAvailability.value.trim()
       };
-      /* ---------------- API mode: save, then upload to B2 ----------------
+      /* ---------------- Save, then upload to B2 ----------------
          The record is saved FIRST so the file has a report to belong to. The
          server keys every object under its report id and will not sign a PUT
          for a report you cannot edit, so there is no such thing as an orphan

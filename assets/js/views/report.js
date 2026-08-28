@@ -364,9 +364,9 @@
     if (feat) {
       feat.addEventListener('change', function () {
         if (!auth.can('report:feature', r, viewer)) { feat.checked = r.featured; return; }
-        /* setFeatured() writes the history entry itself — the server does it in
-           API mode, the store does it in demo mode. */
-        store.setFeatured(r.id, feat.checked, viewer.id);
+        /* The server writes the featured/unfeatured history entry itself, so
+           setFeatured() adds none locally. */
+        store.setFeatured(r.id, feat.checked);
         ui.toast(feat.checked ? 'Record featured in the library.' : 'Record removed from featured.', 'good');
         reRender();
       });
@@ -379,7 +379,7 @@
         ui.confirmDialog('Delete record',
           'This permanently removes the record, its history and all comments. This cannot be undone.',
           'Delete permanently', function () {
-            /* Server first in API mode — it owns the row and is the only thing
+            /* Server first — it owns the row and is the only thing
                that can remove the file from B2. Navigating before it confirms
                would report a deletion that had not happened. */
             store.deleteReport(r.id).then(function () {
