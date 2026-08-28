@@ -27,6 +27,8 @@
 
   var MISSION_AREAS  = P.MISSION_AREAS;
   var REPORT_TYPES   = P.REPORT_TYPES;
+  var WEEKLY_TYPE    = P.WEEKLY_TYPE;
+  var VISIBILITIES   = P.VISIBILITIES;
   var STATUSES       = P.STATUSES;
   var STATUS_ORDER   = P.STATUS_ORDER;
   var TRANSITIONS    = P.TRANSITIONS;
@@ -123,7 +125,15 @@
      with the rest of the group. Nothing in this hub is visible without a
      session, so this is NOT a public flag. */
   var isReleased = P.isReleased;
+  var isWeekly = P.isWeekly;
+  var isGroupVisible = P.isGroupVisible;
+  var needsReview = P.needsReview;
   function releasedReports() { return getState().reports.filter(isReleased); }
+
+  /* What the signed-in group can see: shared weeklies + released formal reports.
+     The library reads from this, not releasedReports(), so a shared weekly
+     reaches the group and a private one never does. Decided by policy.js. */
+  function groupVisibleReports() { return getState().reports.filter(isGroupVisible); }
 
   /* ---------------- controlled-vocabulary helpers ----------------
      None of these ENFORCE a closed list — unknown values pass through as free
@@ -247,6 +257,42 @@
     if (!r) return null;
     sync(global.ESH.api.reports.feature(reportId, on), 'Updating featured');
     r.featured = !!on;
+    r.updatedAt = nowISO();
+    save();
+    return r;
+  }
+
+  /* The student's visibility switch. Its own gated endpoint, like featuring —
+     the server writes the history entry, so none is added locally. */
+  function setVisibility(reportId, visibility) {
+    var r = reportById(reportId);
+    if (!r) return null;
+    sync(global.ESH.api.reports.visibility(reportId, visibility), 'Updating visibility');
+    r.visibility = visibility;
+    r.updatedAt = nowISO();
+    save();
+    return r;
+  }
+
+  /* The professor's reversible review act. Optimistic like the others; the
+     server writes the history entry, so none is added locally. */
+  function markReviewed(reportId, byUserId) {
+    var r = reportById(reportId);
+    if (!r) return null;
+    sync(global.ESH.api.reports.markReviewed(reportId), 'Marking reviewed');
+    r.reviewedAt = nowISO();
+    r.reviewedBy = byUserId || null;
+    r.updatedAt = nowISO();
+    save();
+    return r;
+  }
+
+  function unreview(reportId) {
+    var r = reportById(reportId);
+    if (!r) return null;
+    sync(global.ESH.api.reports.unreview(reportId), 'Returning to the queue');
+    r.reviewedAt = null;
+    r.reviewedBy = null;
     r.updatedAt = nowISO();
     save();
     return r;
@@ -379,6 +425,7 @@
   global.ESH = global.ESH || {};
   global.ESH.store = {
     MISSION_AREAS: MISSION_AREAS, REPORT_TYPES: REPORT_TYPES,
+    WEEKLY_TYPE: WEEKLY_TYPE, VISIBILITIES: VISIBILITIES,
     STATUSES: STATUSES, STATUS_ORDER: STATUS_ORDER, TRANSITIONS: TRANSITIONS,
     STANDING: STANDING, ACCEPTED_FILES: ACCEPTED_FILES, INSTITUTIONS: INSTITUTIONS,
     CAMPAIGNS: CAMPAIGNS,
@@ -393,10 +440,13 @@
     users: users, interns: interns, supervisors: supervisors,
     userById: userById, userByEmail: userByEmail,
     reports: reports, reportById: reportById, reportsByOwner: reportsByOwner,
-    releasedReports: releasedReports, isReleased: isReleased, authorLine: authorLine,
+    releasedReports: releasedReports, groupVisibleReports: groupVisibleReports,
+    isReleased: isReleased, isWeekly: isWeekly, isGroupVisible: isGroupVisible, needsReview: needsReview,
+    authorLine: authorLine,
 
     createUser: createUser, updateUser: updateUser, markNotificationsSeen: markNotificationsSeen,
-    setFeatured: setFeatured, deleteReport: deleteReport, updateReport: updateReport,
+    setFeatured: setFeatured, setVisibility: setVisibility, deleteReport: deleteReport, updateReport: updateReport,
+    markReviewed: markReviewed, unreview: unreview,
     setStatus: setStatus, addComment: addComment,
 
     issueTemporaryPassword: issueTemporaryPassword

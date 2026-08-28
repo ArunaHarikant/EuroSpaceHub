@@ -605,3 +605,358 @@ test('changing a password requires the current one', async () => {
   });
   assert.equal(withOld.status, 401);
 });
+
+/* ================= weekly reports: Phase 1 (data + vocabulary) =================
+   The type exists, visibility persists with a private default, and an invalid
+   visibility is refused server-side. No visibility behaviour yet — that is
+   Phase 2. */
+
+test('Weekly report is an accepted report type', async () => {
+  const { cookie } = await login('a@test.local', 'u_a');
+  const res = await call('POST', '/api/reports', {
+    cookie,
+    body: { title: 'Week 1', abstract: 'x', reportType: 'Weekly report' }
+  });
+  assert.equal(res.status, 201);
+  assert.equal((await res.json()).report.reportType, 'Weekly report');
+});
+
+test('a new report defaults to private visibility and it round-trips', async () => {
+  const { cookie } = await login('a@test.local', 'u_a');
+  const created = await call('POST', '/api/reports', {
+    cookie, body: { title: 'Week 2', abstract: 'x', reportType: 'Weekly report' }
+  });
+  assert.equal(created.status, 201);
+  const { report } = await created.json();
+  assert.equal(report.visibility, 'private', 'the default must be private');
+  assert.equal(report.reviewedAt, null);
+  assert.equal(report.reviewedBy, null);
+
+  const read = await call('GET', '/api/reports/' + report.id, { cookie });
+  assert.equal((await read.json()).report.visibility, 'private',
+    'visibility must survive being written and read back');
+});
+
+test('an explicit shared visibility is accepted at creation', async () => {
+  const { cookie } = await login('a@test.local', 'u_a');
+  const res = await call('POST', '/api/reports', {
+    cookie,
+    body: { title: 'Week 3', abstract: 'x', reportType: 'Weekly report', visibility: 'shared' }
+  });
+  assert.equal(res.status, 201);
+  assert.equal((await res.json()).report.visibility, 'shared');
+});
+
+test('an invalid visibility value is rejected at creation', async () => {
+  const { cookie } = await login('a@test.local', 'u_a');
+  const res = await call('POST', '/api/reports', {
+    cookie,
+    body: { title: 'Bad', abstract: 'x', reportType: 'Weekly report', visibility: 'world' }
+  });
+  assert.equal(res.status, 400);
+});
+
+test('visibility cannot be set through the report PATCH whitelist', async () => {
+  const { cookie } = await login('a@test.local', 'u_a');
+  const { report } = await (await call('POST', '/api/reports', {
+    cookie, body: { title: 'Week 4', abstract: 'x', reportType: 'Weekly report' }
+  })).json();
+
+  const res = await call('PATCH', '/api/reports/' + report.id, { cookie, body: { visibility: 'shared' } });
+  assert.equal(res.status, 200, 'the request itself is fine — it just must not set visibility');
+  assert.equal(db.reportById(report.id).visibility, 'private',
+    'visibility must change only through its own gated route, not a metadata edit');
+});
+
+/* ================= weekly reports: Phase 2 (student-controlled visibility) =====
+   Visibility is the real authorization change: a private weekly is structurally
+   absent for peers, a shared one reaches them, and only the author (or the
+   supervisor) may flip it. Weeklies never lock, so an author edits their own in
+   any state. Formal reports are untouched. */
+
+/* A dedicated peer account. u_b cannot be used as a peer here: an earlier test
+   ("changing a password invalidates existing sessions") rotates its password
+   permanently, so `login('b@…','u_b')` would 401. */
+{
+  const { hash, salt } = session.hashPassword('pw-u_peer');
+  db.insertUser({ id: 'u_peer', role: 'intern', fullName: 'Peer Intern', email: 'peer@test.local',
+                  passwordHash: hash, passwordSalt: salt, standing: 'active', createdAt: db.nowISO() });
+}
+
+/* Helpers: create a weekly owned by the logged-in cookie, optionally shared. */
+async function makeWeekly(cookie, { title, visibility } = {}) {
+  const res = await call('POST', '/api/reports', {
+    cookie,
+    body: { title: title || 'Weekly', abstract: 'weekly body', reportType: 'Weekly report',
+            visibility: visibility || 'private' }
+  });
+  return (await res.json()).report;
+}
+
+test('a peer cannot read another student\'s PRIVATE weekly', async () => {
+  const a = await login('a@test.local', 'u_a');
+  const w = await makeWeekly(a.cookie, { title: 'A private week', visibility: 'private' });
+
+  const b = await login('peer@test.local', 'u_peer');
+  const direct = await call('GET', '/api/reports/' + w.id, { cookie: b.cookie });
+  assert.equal(direct.status, 404, 'a direct GET must be refused, and reveal nothing');
+
+  const boot = await (await call('GET', '/api/bootstrap', { cookie: b.cookie })).json();
+  assert.ok(!boot.reports.some((r) => r.id === w.id),
+    'the private weekly must be absent from the peer\'s /bootstrap, not merely hidden');
+});
+
+test('a peer CAN read a shared weekly', async () => {
+  const a = await login('a@test.local', 'u_a');
+  const w = await makeWeekly(a.cookie, { title: 'A shared week', visibility: 'shared' });
+
+  const b = await login('peer@test.local', 'u_peer');
+  const direct = await call('GET', '/api/reports/' + w.id, { cookie: b.cookie });
+  assert.equal(direct.status, 200);
+
+  const boot = await (await call('GET', '/api/bootstrap', { cookie: b.cookie })).json();
+  assert.ok(boot.reports.some((r) => r.id === w.id),
+    'a shared weekly must appear in a peer\'s /bootstrap');
+});
+
+test('the visibility endpoint flips private ↔ shared for the author', async () => {
+  const a = await login('a@test.local', 'u_a');
+  const w = await makeWeekly(a.cookie, { visibility: 'private' });
+
+  const shared = await call('POST', '/api/reports/' + w.id + '/visibility', {
+    cookie: a.cookie, body: { visibility: 'shared' }
+  });
+  assert.equal(shared.status, 200);
+  assert.equal((await shared.json()).report.visibility, 'shared');
+  assert.equal(db.reportById(w.id).visibility, 'shared', 'it must persist');
+
+  const back = await call('POST', '/api/reports/' + w.id + '/visibility', {
+    cookie: a.cookie, body: { visibility: 'private' }
+  });
+  assert.equal((await back.json()).report.visibility, 'private');
+});
+
+test('a peer cannot change another person\'s visibility', async () => {
+  const a = await login('a@test.local', 'u_a');
+  const w = await makeWeekly(a.cookie, { visibility: 'shared' });   /* shared, so B can read it */
+
+  const b = await login('peer@test.local', 'u_peer');
+  const res = await call('POST', '/api/reports/' + w.id + '/visibility', {
+    cookie: b.cookie, body: { visibility: 'private' }
+  });
+  assert.equal(res.status, 403, 'a peer may read a shared weekly but not re-hide it');
+  assert.equal(db.reportById(w.id).visibility, 'shared', 'nothing may change on a refusal');
+});
+
+test('an author can edit their own SUBMITTED weekly and the edit persists', async () => {
+  const a = await login('a@test.local', 'u_a');
+  const w = await makeWeekly(a.cookie, { title: 'Editable week' });
+  /* Move it to submitted — a formal report would lock at review, a weekly never does. */
+  await call('POST', '/api/reports/' + w.id + '/status', {
+    cookie: a.cookie, body: { status: 'submitted', note: 'Submitted.' }
+  });
+  assert.equal(db.reportById(w.id).status, 'submitted');
+
+  const edit = await call('PATCH', '/api/reports/' + w.id, {
+    cookie: a.cookie, body: { title: 'Editable week (revised)' }
+  });
+  assert.equal(edit.status, 200, 'a submitted weekly must still be editable by its author');
+  assert.equal(db.reportById(w.id).title, 'Editable week (revised)');
+});
+
+test('setting visibility on a FORMAL report is refused, and its group visibility is unaffected', async () => {
+  const a = await login('a@test.local', 'u_a');
+  const { report } = await (await call('POST', '/api/reports', {
+    cookie: a.cookie, body: { title: 'Formal', abstract: 'x', reportType: 'Research paper' }
+  })).json();
+
+  const res = await call('POST', '/api/reports/' + report.id + '/visibility', {
+    cookie: a.cookie, body: { visibility: 'shared' }
+  });
+  assert.equal(res.status, 403, 'visibility applies to weeklies only');
+
+  /* A formal report reaches the group only when released, regardless of the
+     visibility column. Draft ⇒ a peer cannot see it. */
+  const b = await login('peer@test.local', 'u_peer');
+  const boot = await (await call('GET', '/api/bootstrap', { cookie: b.cookie })).json();
+  assert.ok(!boot.reports.some((r) => r.id === report.id),
+    'a draft formal report stays invisible to peers whatever its visibility column says');
+});
+
+test('an author\'s own private weekly still reaches the supervisor', async () => {
+  const a = await login('a@test.local', 'u_a');
+  const w = await makeWeekly(a.cookie, { visibility: 'private' });
+
+  const s = await login('sup@test.local', 'u_sup');
+  const direct = await call('GET', '/api/reports/' + w.id, { cookie: s.cookie });
+  assert.equal(direct.status, 200, 'private hides from peers, never from the professor');
+});
+
+/* ================= weekly reports: Phase 3 (the professor's review queue) ======
+   Submitting a weekly queues it; Mark reviewed clears it; Return to queue puts
+   it back; visibility is untouched throughout; a private weekly is queued too;
+   an edit after review keeps it reviewed and does not re-queue. */
+
+/* A submitted weekly, owned by u_a, at a known visibility. */
+async function submittedWeekly(cookie, visibility) {
+  const w = await makeWeekly(cookie, { visibility: visibility || 'private' });
+  await call('POST', '/api/reports/' + w.id + '/status', {
+    cookie, body: { status: 'submitted', note: 'Submitted.' }
+  });
+  return db.reportById(w.id);
+}
+
+test('submitting a weekly puts it in the queue; reviewing clears it; unreview restores it', async () => {
+  const a = await login('a@test.local', 'u_a');
+  const s = await login('sup@test.local', 'u_sup');
+  const w = await submittedWeekly(a.cookie, 'private');
+  assert.ok(policy.needsReview(db.reportById(w.id)), 'a submitted weekly needs review');
+
+  const reviewed = await call('POST', '/api/reports/' + w.id + '/reviewed', { cookie: s.cookie });
+  assert.equal(reviewed.status, 200);
+  const afterReview = db.reportById(w.id);
+  assert.ok(afterReview.reviewedAt && afterReview.reviewedBy === 'u_sup', 'reviewedAt/By must be set');
+  assert.ok(!policy.needsReview(afterReview), 'a reviewed weekly leaves the queue');
+
+  const back = await call('POST', '/api/reports/' + w.id + '/unreview', { cookie: s.cookie });
+  assert.equal(back.status, 200);
+  const afterBack = db.reportById(w.id);
+  assert.equal(afterBack.reviewedAt, null);
+  assert.equal(afterBack.reviewedBy, null);
+  assert.ok(policy.needsReview(afterBack), 'un-reviewing returns it to the queue');
+});
+
+test('review leaves visibility untouched', async () => {
+  const a = await login('a@test.local', 'u_a');
+  const s = await login('sup@test.local', 'u_sup');
+  const w = await submittedWeekly(a.cookie, 'shared');
+
+  await call('POST', '/api/reports/' + w.id + '/reviewed', { cookie: s.cookie });
+  assert.equal(db.reportById(w.id).visibility, 'shared', 'reviewing must not change visibility');
+  await call('POST', '/api/reports/' + w.id + '/unreview', { cookie: s.cookie });
+  assert.equal(db.reportById(w.id).visibility, 'shared', 'un-reviewing must not change visibility');
+});
+
+test('a PRIVATE weekly is in the professor\'s queue', async () => {
+  const a = await login('a@test.local', 'u_a');
+  const w = await submittedWeekly(a.cookie, 'private');
+  assert.ok(policy.needsReview(db.reportById(w.id)),
+    'private hides from peers, but the professor reviews everything');
+});
+
+test('an intern cannot mark a weekly reviewed', async () => {
+  const a = await login('a@test.local', 'u_a');
+  const w = await submittedWeekly(a.cookie, 'private');
+  const res = await call('POST', '/api/reports/' + w.id + '/reviewed', { cookie: a.cookie });
+  assert.equal(res.status, 403);
+  assert.equal(db.reportById(w.id).reviewedAt, null, 'nothing may change on a refusal');
+});
+
+test('reviewing a FORMAL report is refused', async () => {
+  const a = await login('a@test.local', 'u_a');
+  const s = await login('sup@test.local', 'u_sup');
+  const { report } = await (await call('POST', '/api/reports', {
+    cookie: a.cookie, body: { title: 'Formal', abstract: 'x', reportType: 'Research paper' }
+  })).json();
+  const res = await call('POST', '/api/reports/' + report.id + '/reviewed', { cookie: s.cookie });
+  assert.equal(res.status, 403, 'the mark-reviewed act is for weeklies only');
+});
+
+test('editing a reviewed weekly keeps it reviewed, does not re-queue, and notes it', async () => {
+  const a = await login('a@test.local', 'u_a');
+  const s = await login('sup@test.local', 'u_sup');
+  const w = await submittedWeekly(a.cookie, 'private');
+  await call('POST', '/api/reports/' + w.id + '/reviewed', { cookie: s.cookie });
+  const reviewedAt = db.reportById(w.id).reviewedAt;
+
+  const edit = await call('PATCH', '/api/reports/' + w.id, {
+    cookie: a.cookie, body: { title: 'Week (edited after review)' }
+  });
+  assert.equal(edit.status, 200, 'the author may edit a reviewed weekly');
+  const after = db.reportById(w.id);
+  assert.equal(after.title, 'Week (edited after review)');
+  assert.equal(after.reviewedAt, reviewedAt, 'the review stamp is preserved');
+  assert.ok(!policy.needsReview(after), 'it must not re-enter the queue');
+  assert.ok((after.history || []).some((h) => h.note === 'Weekly edited after review.'),
+    'the history must record that it was edited after review');
+});
+
+/* ================= weekly reports: Phase 4 (group comments) ====================
+   Any signed-in member may comment on a group-visible report; a private one
+   stays author + professor only, which falls out of the visibility rule rather
+   than a second check. Internal notes never reach a non-supervisor. */
+
+test('a peer can comment on a shared weekly', async () => {
+  const a = await login('a@test.local', 'u_a');
+  const w = await makeWeekly(a.cookie, { visibility: 'shared' });
+
+  const peer = await login('peer@test.local', 'u_peer');
+  const res = await call('POST', '/api/reports/' + w.id + '/comments', {
+    cookie: peer.cookie, body: { body: 'A peer comment on a shared weekly.' }
+  });
+  assert.equal(res.status, 201);
+  assert.ok((db.reportById(w.id).comments || []).some((c) => c.authorId === 'u_peer'),
+    'the peer comment must be recorded');
+});
+
+test('a peer cannot comment on (or even reach) a private weekly', async () => {
+  const a = await login('a@test.local', 'u_a');
+  const w = await makeWeekly(a.cookie, { visibility: 'private' });
+
+  const peer = await login('peer@test.local', 'u_peer');
+  const res = await call('POST', '/api/reports/' + w.id + '/comments', {
+    cookie: peer.cookie, body: { body: 'Should be refused.' }
+  });
+  assert.equal(res.status, 404, 'the report is not readable, so commenting 404s before any write');
+  assert.equal((db.reportById(w.id).comments || []).length, 0);
+});
+
+test('a peer can comment on a released formal report', async () => {
+  const a = await login('a@test.local', 'u_a');
+  const { report } = await (await call('POST', '/api/reports', {
+    cookie: a.cookie, body: { title: 'Formal for comment', abstract: 'x', reportType: 'Research paper' }
+  })).json();
+  /* Release it: the author submits (draft→submitted is the intern's move),
+     then the supervisor approves. */
+  const s = await login('sup@test.local', 'u_sup');
+  await call('POST', '/api/reports/' + report.id + '/status', { cookie: a.cookie, body: { status: 'submitted' } });
+  await call('POST', '/api/reports/' + report.id + '/status', { cookie: s.cookie, body: { status: 'approved' } });
+  assert.equal(db.reportById(report.id).status, 'approved');
+
+  const peer = await login('peer@test.local', 'u_peer');
+  const res = await call('POST', '/api/reports/' + report.id + '/comments', {
+    cookie: peer.cookie, body: { body: 'Peer comment on a released paper.' }
+  });
+  assert.equal(res.status, 201);
+});
+
+test('an internal note stays absent from a peer\'s view of a shared weekly', async () => {
+  const a = await login('a@test.local', 'u_a');
+  const w = await makeWeekly(a.cookie, { visibility: 'shared' });
+  const s = await login('sup@test.local', 'u_sup');
+  await call('POST', '/api/reports/' + w.id + '/comments', {
+    cookie: s.cookie, body: { body: 'INTERNAL-MARKER note', internal: true }
+  });
+
+  const peer = await login('peer@test.local', 'u_peer');
+  const got = await (await call('GET', '/api/reports/' + w.id, { cookie: peer.cookie })).json();
+  assert.ok(!JSON.stringify(got.report.comments).includes('INTERNAL-MARKER'),
+    'an internal note must be absent from the peer payload, not merely hidden');
+});
+
+test('a peer cannot forge an internal note on a shared weekly', async () => {
+  const a = await login('a@test.local', 'u_a');
+  const w = await makeWeekly(a.cookie, { visibility: 'shared' });
+
+  const peer = await login('peer@test.local', 'u_peer');
+  const res = await call('POST', '/api/reports/' + w.id + '/comments', {
+    cookie: peer.cookie, body: { body: 'Trying to be internal', internal: true }
+  });
+  /* The comment may post, but it must not be internal. */
+  if (res.status === 201) {
+    const posted = (db.reportById(w.id).comments || []).find((c) => c.authorId === 'u_peer');
+    assert.ok(posted && !posted.internal, 'a non-supervisor cannot create an internal note');
+  } else {
+    assert.equal(res.status, 403);
+  }
+});

@@ -59,6 +59,8 @@
     var freeCoAuthors = (r.coAuthors || []).filter(function (c) { return !c.userId; })
       .map(function (c) { return c.name; }).join(', ');
     var st = store.STATUSES[r.status];
+    var weekly = r.reportType === store.WEEKLY_TYPE;
+    var vis = r.visibility || 'private';
 
     ctx.el.innerHTML =
     '<div class="wrap wrap--880">' +
@@ -108,6 +110,17 @@
               store.CAMPAIGNS.map(function (c) { return '<option value="' + esc(c) + '"></option>'; }).join('') +
             '</datalist>' +
             '<p class="field__hint">Optional. Groups related work in the library.</p></div>' +
+          /* Weekly-only. Rendered always so the type-change listener can reveal
+             it without a re-render; hidden until the type is a weekly. */
+          '<div class="field" id="visibilityField"' + (weekly ? '' : ' hidden') + '>' +
+            '<span class="field__label">Who can see this weekly</span>' +
+            '<label class="checkline"><input type="radio" name="visibility" value="private"' +
+              (vis === 'private' ? ' checked' : '') + '>' +
+              '<span>Private — only you and Prof. Foing</span></label>' +
+            '<label class="checkline"><input type="radio" name="visibility" value="shared"' +
+              (vis === 'shared' ? ' checked' : '') + '>' +
+              '<span>Share with the group — everyone signed in can read it</span></label>' +
+            '<p class="field__hint">You can change this anytime, before or after submitting.</p></div>' +
         '</fieldset>' +
 
         '<fieldset><legend>Authorship</legend>' +
@@ -201,6 +214,13 @@
       document.getElementById('suppRows').insertAdjacentHTML('beforeend', suppRow({ label: '', url: '' }, suppIdx++));
     });
 
+    /* The visibility control belongs to weeklies only; reveal it live when the
+       type changes, without re-rendering the form. */
+    var visField = document.getElementById('visibilityField');
+    f.elements.reportType.addEventListener('change', function () {
+      visField.hidden = f.elements.reportType.value !== store.WEEKLY_TYPE;
+    });
+
     f.querySelectorAll('button[type=submit]').forEach(function (b) {
       b.addEventListener('click', function () { intent = b.value; });
     });
@@ -212,9 +232,11 @@
 
       if (!f.elements.title.value.trim()) { ui.fieldError(f.elements.title, 'Enter a title.'); ok = false; }
       var absText = abs.value.trim();
+      var isWeekly = f.elements.reportType.value === store.WEEKLY_TYPE;
       if (!absText) { ui.fieldError(abs, 'An abstract is required.'); ok = false; }
       else if (ui.wordCount(absText) > ABSTRACT_MAX) { ui.fieldError(abs, 'The abstract exceeds ' + ABSTRACT_MAX + ' words.'); ok = false; }
-      else if (intent === 'submit' && ui.wordCount(absText) < 40) {
+      else if (!isWeekly && intent === 'submit' && ui.wordCount(absText) < 40) {
+        /* Weeklies are meant to be short — the 40-word floor is for formal work. */
         ui.fieldError(abs, 'Expand the abstract before submitting for review (at least 40 words).'); ok = false;
       }
 
@@ -248,12 +270,18 @@
         supplementary: supplementary,
         dataAvailability: f.elements.dataAvailability.value.trim()
       };
+      /* Visibility is a weekly-only field, and it is NOT patchable — it rides
+         the create body on a new weekly, and goes through its own endpoint when
+         an existing weekly's setting is changed. */
+      var weekly = f.elements.reportType.value === store.WEEKLY_TYPE;
+      var visibility = weekly && f.elements.visibility ? f.elements.visibility.value : null;
+
       /* ---------------- Save, then upload to B2 ----------------
          The record is saved FIRST so the file has a report to belong to. The
          server keys every object under its report id and will not sign a PUT
          for a report you cannot edit, so there is no such thing as an orphan
          upload floating free of a permission check. */
-      saveViaApi(patch, r, isEdit, intent, pendingFile, f);
+      saveViaApi(patch, r, isEdit, intent, pendingFile, f, weekly, visibility);
     });
   }
 
@@ -270,7 +298,7 @@
      Every step is refused server-side if the policy says no, so a tampered
      page can at worst make requests that get rejected.
      ========================================================================== */
-  function saveViaApi(patch, existing, isEdit, intent, pendingFile, formEl) {
+  function saveViaApi(patch, existing, isEdit, intent, pendingFile, formEl, weekly, visibility) {
     var api = ESH.api;
     var buttons = [].slice.call(formEl.querySelectorAll('button[type=submit]'));
     var progress = document.getElementById('uploadProgress');
@@ -290,11 +318,23 @@
 
     busy(true, 'Saving record…');
 
+    /* A new weekly carries its visibility in the create body (accepted at
+       creation). A metadata edit cannot set it — the PATCH whitelist excludes
+       it — so a changed setting on an existing weekly goes through the
+       dedicated endpoint in the next step. */
+    var createBody = (!isEdit && weekly && visibility)
+      ? Object.assign({}, patch, { visibility: visibility })
+      : patch;
+
     var saved = isEdit
       ? api.reports.update(existing.id, patch).then(function (d) { return d.report; })
-      : api.reports.create(patch).then(function (d) { return d.report; });
+      : api.reports.create(createBody).then(function (d) { return d.report; });
 
     saved.then(function (rec) {
+      if (!(isEdit && weekly && visibility && visibility !== existing.visibility)) return rec;
+      busy(true, 'Updating visibility…');
+      return api.reports.visibility(rec.id, visibility).then(function (d) { return d.report || rec; });
+    }).then(function (rec) {
       if (!pendingFile) return rec;
       busy(true, 'Uploading ' + pendingFile.name + '… 0%');
       return api.uploadFile(rec.id, pendingFile, function (fraction) {
@@ -318,12 +358,107 @@
     }).catch(fail);
   }
 
+  /* ==========================================================================
+     Quick-submit — a trimmed form for a weekly report: title, week/period,
+     a short body, and visibility. It creates a 'Weekly report' record and runs
+     the SAME save pipeline (saveViaApi) as the full form; the full form remains
+     available for anyone who wants files, co-authors or supplementary links.
+     Week/period is stored in the campaign field, which already groups related
+     work in the library.
+     ========================================================================== */
+  function weeklyForm(ctx) {
+    ctx.el.innerHTML =
+    '<div class="wrap wrap--680">' +
+      '<p class="meta mb-10"><a href="#/me">&larr; Back to my profile</a></p>' +
+      '<p class="eyebrow">Weekly report</p>' +
+      '<h1>Quick-submit a weekly</h1>' +
+      '<p class="lede">A short update for the group. Need files, co-authors or a full abstract? ' +
+        'Use the <a href="#/submit">full submission form</a> instead.</p>' +
+
+      '<form id="repForm" novalidate>' +
+        '<div class="field"><label for="sTitle">Title <span class="req">*</span></label>' +
+          '<input type="text" id="sTitle" name="title" placeholder="e.g. Regolith sampling — first results" required></div>' +
+        '<div class="field"><label for="sCampaign">Week / period</label>' +
+          '<input type="text" id="sCampaign" name="campaign" list="campaignList" ' +
+            'placeholder="Optional — e.g. Week 5, or May 2026">' +
+          '<datalist id="campaignList">' +
+            store.CAMPAIGNS.map(function (c) { return '<option value="' + esc(c) + '"></option>'; }).join('') +
+          '</datalist>' +
+          '<p class="field__hint">Groups related weeklies together in the library.</p></div>' +
+        '<div class="field"><label for="sAbs">This week <span class="req">*</span></label>' +
+          '<textarea id="sAbs" name="abstract" rows="6" required ' +
+            'placeholder="What you did, what you found, what is next."></textarea>' +
+          '<p class="field__hint"><span id="absCount" class="tnum"></span> — up to ' + ABSTRACT_MAX + ' words.</p></div>' +
+        '<div class="field"><span class="field__label">Who can see this weekly</span>' +
+          '<label class="checkline"><input type="radio" name="visibility" value="private" checked>' +
+            '<span>Private — only you and Prof. Foing</span></label>' +
+          '<label class="checkline"><input type="radio" name="visibility" value="shared">' +
+            '<span>Share with the group — everyone signed in can read it</span></label>' +
+          '<p class="field__hint">You can change this anytime.</p></div>' +
+
+        '<div class="card bg-1">' +
+          '<div class="btn-row">' +
+            '<button class="btn" type="submit" name="intent" value="save">Save as draft</button>' +
+            '<button class="btn btn--primary" type="submit" name="intent" value="submit">Submit to Prof. Foing</button>' +
+            '<a class="btn btn--ghost" href="#/me">Cancel</a>' +
+          '</div>' +
+          '<p class="field__hint" id="uploadProgress" hidden role="status"></p>' +
+        '</div>' +
+      '</form>' +
+    '</div>';
+
+    var f = document.getElementById('repForm');
+    var abs = document.getElementById('sAbs');
+    var count = document.getElementById('absCount');
+    var intent = 'save';
+
+    function updateCount() {
+      var n = ui.wordCount(abs.value);
+      count.textContent = n + ' word' + (n === 1 ? '' : 's');
+      count.style.color = n > ABSTRACT_MAX ? '#ff9b9b' : 'var(--ink-3)';
+    }
+    abs.addEventListener('input', updateCount);
+    updateCount();
+
+    f.querySelectorAll('button[type=submit]').forEach(function (b) {
+      b.addEventListener('click', function () { intent = b.value; });
+    });
+
+    f.addEventListener('submit', function (e) {
+      e.preventDefault();
+      ui.clearAllErrors(f);
+      var ok = true;
+      if (!f.elements.title.value.trim()) { ui.fieldError(f.elements.title, 'Enter a title.'); ok = false; }
+      var absText = abs.value.trim();
+      if (!absText) { ui.fieldError(abs, 'Write a short update.'); ok = false; }
+      else if (ui.wordCount(absText) > ABSTRACT_MAX) {
+        ui.fieldError(abs, 'That is over ' + ABSTRACT_MAX + ' words — trim it, or use the full form.'); ok = false;
+      }
+      if (!ok) { ui.focusFirstError(f); return; }
+
+      var patch = {
+        title: f.elements.title.value.trim(),
+        reportType: store.WEEKLY_TYPE,
+        campaign: store.canonicalCampaign(f.elements.campaign.value),
+        abstract: absText,
+        keywords: [], coAuthors: [], supplementary: [], dataAvailability: ''
+      };
+      saveViaApi(patch, null, false, intent, null, f, true, f.elements.visibility.value);
+    });
+  }
+
   /* ---------------- entry points ---------------- */
 
   function create(ctx) {
     var viewer = auth.user();
     if (!auth.can('report:create', null, viewer)) { router.navigate('#/denied', true); return; }
     form(ctx, null);
+  }
+
+  function weeklyCreate(ctx) {
+    var viewer = auth.user();
+    if (!auth.can('report:create', null, viewer)) { router.navigate('#/denied', true); return; }
+    weeklyForm(ctx);
   }
 
   function editReport(ctx) {
@@ -346,6 +481,7 @@
 
   ESH.views = ESH.views || {};
   ESH.views.submit = create;
+  ESH.views.weeklySubmit = weeklyCreate;
   ESH.views.reportEdit = editReport;
 
 })(window);

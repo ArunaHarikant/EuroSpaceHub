@@ -121,7 +121,9 @@
       (r.history || []).forEach(function (h) {
         if (!h.to || h.from === h.to || h.by === u.id) return;   /* skip own actions + non-transitions */
         if (sup) {
-          if (h.to === 'submitted') {
+          /* Weeklies are notified from live review state below, not from the
+             submit transition — so the item clears once reviewed. */
+          if (h.to === 'submitted' && !store.isWeekly(r)) {
             var au = store.userById(r.ownerId);
             push(h.at, r.id, 'submitted', (au ? au.fullName : 'A researcher') + ' submitted ' + quote(r) + ' for review');
           }
@@ -147,6 +149,15 @@
           push(c.at, r.id, 'comment', 'New review comment on ' + quote(r));
         }
       });
+
+      /* A weekly awaiting review is a supervisor notification derived from live
+         state: it appears while needsReview() holds and disappears the moment
+         it is marked reviewed, reappearing if it is returned to the queue. */
+      if (sup && r.ownerId !== u.id && store.needsReview(r)) {
+        var wau = store.userById(r.ownerId);
+        push(r.submittedAt, r.id, 'weekly-submitted',
+          (wau ? wau.fullName : 'A researcher') + ' submitted a weekly report');
+      }
     });
 
     out.sort(function (a, b) { return new Date(b.at) - new Date(a.at); });

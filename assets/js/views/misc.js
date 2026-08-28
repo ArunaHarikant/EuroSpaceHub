@@ -102,6 +102,23 @@
           '<td>' + esc(lab(t.intern)) + '</td><td>' + esc(lab(t.supervisor)) + '</td></tr>';
       }).join('') + '</tbody></table></div>' +
 
+      '<h2>Weekly reports</h2>' +
+      '<p>A <strong>weekly report</strong> is a lightweight update and does not use the eight-state ' +
+        'flow above. Instead it has two independent switches:</p>' +
+      '<ul>' +
+        '<li><strong>Visibility is the student\'s.</strong> A weekly is <em>private</em> ' +
+          '(only its author and Prof. Foing) or <em>shared</em> (readable by everyone signed in). ' +
+          'The student changes this at any time, with no approval step. Private hides a weekly from ' +
+          'peers, never from the supervisor.</li>' +
+        '<li><strong>Review is the professor\'s.</strong> A submitted weekly sits in Prof. Foing\'s ' +
+          'review queue until he marks it reviewed — a single act that changes nothing about ' +
+          'visibility and can be reversed, returning the weekly to the queue.</li>' +
+      '</ul>' +
+      '<p>Weeklies never lock: the author can edit one in any state, including after it has been ' +
+        'reviewed, which keeps it reviewed and does not re-queue it. Any signed-in member can comment ' +
+        'on a shared weekly, the same as on any released report; a private weekly stays between its ' +
+        'author and the supervisor.</p>' +
+
       '<h2>Sessions and passwords</h2>' +
       '<p>The session is an <strong>httpOnly cookie</strong> backed by a row in the database. The ' +
         'browser cannot read it, and nothing in the page treats it as a credential — the client only ' +

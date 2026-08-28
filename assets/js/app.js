@@ -53,6 +53,7 @@
   router.register('/report/:id',            V.report,      'auth');
   router.register('/report/:id/edit',       V.reportEdit,  'auth');
   router.register('/submit',                V.submit,      'auth');
+  router.register('/submit-weekly',         V.weeklySubmit, 'intern');
   router.register('/researcher/:id',        V.profile,     'auth');
   router.register('/researcher/:id/edit',   V.profileEdit, 'auth');
   router.register('/me',                    V.me,          'auth');
@@ -76,8 +77,9 @@
       items.push({ href: '#/library', label: 'Report library', match: ['/library', '/report'] });
     }
     if (auth.isIntern()) {
-      items.push({ href: '#/me',     label: 'My profile',    match: ['/me', '/researcher'] });
-      items.push({ href: '#/submit', label: 'Submit report', match: ['/submit'] });
+      items.push({ href: '#/me',            label: 'My profile',    match: ['/me', '/researcher'] });
+      items.push({ href: '#/submit-weekly', label: 'Weekly',        match: ['/submit-weekly'] });
+      items.push({ href: '#/submit',        label: 'Submit report', match: ['/submit'] });
     }
     if (auth.isSupervisor()) {
       items.push({ href: '#/dashboard', label: 'Supervisor dashboard', match: ['/dashboard'] });

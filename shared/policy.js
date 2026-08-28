@@ -35,8 +35,22 @@
     'Poster',
     'Presentation slides',
     'Dataset + description',
-    'Analogue mission report'
+    'Analogue mission report',
+    'Weekly report'
   ];
+
+  /* Weekly reports use a lightweight flow, not the eight-state workflow: the
+     student owns visibility (private/shared) and the professor owns a single,
+     reversible "reviewed" act. Formal report types keep the `released` model
+     unchanged. isWeekly() is the one place that distinction is decided. */
+  var WEEKLY_TYPE = 'Weekly report';
+  function isWeekly(report) {
+    return !!(report && report.reportType === WEEKLY_TYPE);
+  }
+
+  /* Who may see a weekly among peers. `private` hides it from other students
+     but NEVER from the supervisor, who sees every report in every state. */
+  var VISIBILITIES = ['private', 'shared'];
 
   var STANDING = ['active', 'inactive', 'alumnus'];
 
@@ -101,6 +115,25 @@
     return !!(report && STATUSES[report.status] && STATUSES[report.status].released);
   }
 
+  /* THE group-visibility predicate — decided in exactly one place so the
+     library, /bootstrap and report:read can never disagree. A report reaches
+     the signed-in group if it is a shared weekly, or any other type that the
+     supervisor has released. Everything downstream reads from this, never from
+     isReleased directly, so a private weekly cannot leak through a filter. */
+  function isGroupVisible(report) {
+    if (!report) return false;
+    if (isWeekly(report)) return report.visibility === 'shared';
+    return isReleased(report);
+  }
+
+  /* A weekly needs the professor's review when it has been submitted and not
+     yet cleared. Keyed on reviewedAt, so an edit (which never touches it) does
+     not re-queue a reviewed weekly, and un-reviewing (which clears it) puts it
+     back. Private weeklies are included — the professor reviews everything. */
+  function needsReview(report) {
+    return isWeekly(report) && !!report.submittedAt && !report.reviewedAt;
+  }
+
   function isOwner(actor, resource) {
     if (!actor || !resource) return false;
     if (resource.ownerId) return resource.ownerId === actor.id;   /* report */
@@ -128,7 +161,7 @@
         if (!resource) return false;
         if (sup) return true;                            /* supervisor sees all states */
         if (!intern) return false;                       /* no session ⇒ no records */
-        return owner || isReleased(resource);            /* own work, or released work */
+        return owner || isGroupVisible(resource);        /* own work, or group-visible work */
 
       case 'report:readAny':                             /* the dashboard's "see everything" */
         return sup;
@@ -141,9 +174,22 @@
         if (!resource) return false;
         if (sup) return true;                            /* supervisor may correct metadata */
         if (!intern || !owner) return false;
+        if (isWeekly(resource)) return true;             /* weeklies never lock */
         var st = STATUSES[resource.status];
         return !!(st && st.internEditable);
       }
+
+      /* Visibility is the STUDENT'S switch, changeable anytime with no
+         supervisor gate, and it applies to weeklies only — a formal report's
+         group visibility stays tied to `released`. Peers may not change it. */
+      case 'report:setVisibility':
+        if (!resource || !isWeekly(resource)) return false;
+        return sup || (intern && owner);
+
+      /* Marking a weekly reviewed, and reversing it, are the professor's — a
+         single reversible act, not a workflow transition. Weeklies only. */
+      case 'report:review':
+        return sup && !!resource && isWeekly(resource);
 
       case 'report:delete':                              /* hard delete is supervisor-only */
         return sup;
@@ -181,7 +227,8 @@
       case 'comment:write':
         if (!resource) return false;
         if (sup) return true;
-        return intern && owner;                          /* interns may reply on own reports */
+        if (intern && owner) return true;                /* your own report, any state */
+        return intern && isGroupVisible(resource);       /* any member on group-visible work */
 
       case 'comment:writeInternal':
         return sup;
@@ -254,7 +301,7 @@
     var all = allReports || [];
     if (actor && actor.role === 'supervisor') return all.slice();
     if (actor && actor.role === 'intern') {
-      return all.filter(function (r) { return r.ownerId === actor.id || isReleased(r); });
+      return all.filter(function (r) { return r.ownerId === actor.id || isGroupVisible(r); });
     }
     return [];
   }
@@ -314,6 +361,8 @@
   return {
     MISSION_AREAS: MISSION_AREAS,
     REPORT_TYPES: REPORT_TYPES,
+    WEEKLY_TYPE: WEEKLY_TYPE,
+    VISIBILITIES: VISIBILITIES,
     STANDING: STANDING,
     STATUSES: STATUSES,
     STATUS_ORDER: STATUS_ORDER,
@@ -326,6 +375,9 @@
     SHARED_USER_FIELDS: SHARED_USER_FIELDS,
 
     isReleased: isReleased,
+    isWeekly: isWeekly,
+    isGroupVisible: isGroupVisible,
+    needsReview: needsReview,
     isOwner: isOwner,
     can: can,
     allowedTransitions: allowedTransitions,

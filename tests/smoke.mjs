@@ -116,6 +116,16 @@ mkReport({ id: 'r_revis_a', ownerId: 'u_a', title: 'Revisions Requested A',
            status: 'revisions', submittedAt: daysAgo(9) });
 mkReport({ id: 'r_xss', ownerId: 'u_a', title: '<img src=x onerror=alert(1)>XSSTITLE',
            status: 'published' });
+mkReport({ id: 'w_shared_a', ownerId: 'u_a', title: 'SHARED-WEEKLY-MARKER Week 5',
+           reportType: 'Weekly report', visibility: 'shared', status: 'submitted', submittedAt: daysAgo(3),
+           comments: [{ id: 'wc_sup', authorId: 'u_sup', at: daysAgo(2),
+                        body: 'SUPERVISOR-WEEKLY-COMMENT good progress.', parentId: null, internal: false }] });
+mkReport({ id: 'w_priv2_a', ownerId: 'u_a', title: 'PRIVATE2-WEEKLY-MARKER Week 8',
+           reportType: 'Weekly report', visibility: 'private', status: 'submitted', submittedAt: daysAgo(1) });
+mkReport({ id: 'w_priv_a', ownerId: 'u_a', title: 'PRIVATE-WEEKLY-MARKER Week 6',
+           reportType: 'Weekly report', visibility: 'private', status: 'submitted', submittedAt: daysAgo(2) });
+mkReport({ id: 'w_queue', ownerId: 'u_b', title: 'QUEUE-WEEKLY-MARKER Week 7',
+           reportType: 'Weekly report', visibility: 'private', status: 'submitted', submittedAt: daysAgo(1) });
 
 /* ---------------- harness ---------------- */
 
@@ -136,8 +146,8 @@ async function waitFor(pred, timeoutMs = 8000, stepMs = 20) {
 }
 
 const IGNORED = /Not implemented: Window's (scrollTo|scroll|scrollBy)/;
-const REQUIRED_VIEWS = ['foing', 'library', 'report', 'reportEdit', 'submit', 'profile',
-                        'profileEdit', 'me', 'inbox', 'dashboard', 'signin', 'register',
+const REQUIRED_VIEWS = ['foing', 'library', 'report', 'reportEdit', 'submit', 'weeklySubmit',
+                        'profile', 'profileEdit', 'me', 'inbox', 'dashboard', 'signin', 'register',
                         'reset', 'accessModel', 'denied', 'notFound'];
 
 /* One jar for the whole run: signing in as somebody else replaces the cookie,
@@ -403,6 +413,197 @@ goto('#/dashboard');
 ok('a co-supervisor reaches the dashboard', /dashboard/i.test(text()));
 ok('and sees internal notes too',
   ESH.auth.can('user:readInternalNotes', ESH.store.userById('u_a')));
+
+/* ================= WEEKLY VISIBILITY (Phase 2) ================= */
+section('Weekly reports — visibility');
+
+/* A peer: the shared weekly reaches them, the private one is structurally
+   absent — from the library and from a direct open. */
+await signInAs('b@test.local');
+goto('#/library');
+const libAsPeer = text();
+ok('a shared weekly reaches a peer in the library', /SHARED-WEEKLY-MARKER/.test(libAsPeer));
+ok('a private weekly never reaches a peer', !/PRIVATE-WEEKLY-MARKER/.test(libAsPeer));
+ok('Weekly report is a library type filter option',
+  /Weekly report/.test(window.document.getElementById('libFilters').innerHTML));
+
+goto('#/report/w_priv_a');
+ok('a peer cannot open a private weekly', !/PRIVATE-WEEKLY-MARKER/.test(text()),
+  text().slice(0, 90));
+goto('#/report/w_shared_a');
+ok('a peer can open a shared weekly', /SHARED-WEEKLY-MARKER/.test(text()));
+ok('a peer sees no visibility toggle on someone else\'s weekly',
+  !window.document.getElementById('visToggle'));
+
+/* The author: badge, toggle, and a real flip that persists to the server. */
+await signInAs('a@test.local');
+goto('#/report/w_priv_a');
+ok('the author sees a Private badge on their weekly', /Private/.test(text()));
+const toggle = window.document.getElementById('visToggle');
+ok('the author gets a visibility toggle', !!toggle);
+
+if (toggle) {
+  toggle.checked = true;
+  toggle.dispatchEvent(new window.Event('change'));
+  ok('flipping to shared persists to the server', await waitFor(async () => {
+    const j = await (await window.fetch('/api/reports/w_priv_a')).json();
+    return j.report && j.report.visibility === 'shared';
+  }, 3000));
+}
+
+/* Editability: a weekly stays editable for its author even when submitted. */
+goto('#/report/w_shared_a');
+ok('the author can edit a submitted weekly', /Edit this record/.test(html()));
+goto('#/report/w_shared_a/edit');
+ok('the weekly edit form opens', !!window.document.getElementById('repForm'));
+ok('the edit form shows the visibility control for a weekly',
+  !!window.document.getElementById('visibilityField') &&
+  !window.document.getElementById('visibilityField').hidden);
+
+/* ================= WEEKLY GROUP COMMENTS (Phase 4) ================= */
+section('Weekly reports — group comments');
+
+await signInAs('b@test.local');   /* a peer, not the author */
+goto('#/report/w_shared_a');
+ok('a peer sees the comment thread on a shared weekly', /SUPERVISOR-WEEKLY-COMMENT/.test(text()));
+ok('the professor comment carries a Supervisor badge', /badge--role/.test(html()));
+const cForm = window.document.getElementById('commentForm');
+ok('a peer gets a comment box on a shared weekly', !!cForm);
+if (cForm) {
+  cForm.elements.body.value = 'PEER-COMMENT-MARKER from a colleague';
+  cForm.dispatchEvent(new window.Event('submit', { cancelable: true, bubbles: true }));
+  ok('the peer comment persists to the server', await waitFor(async () => {
+    const j = await (await window.fetch('/api/reports/w_shared_a')).json();
+    return JSON.stringify(j.report.comments || []).includes('PEER-COMMENT-MARKER');
+  }, 3000));
+}
+
+/* The box does not appear on a report the viewer cannot reach (a private weekly
+   of someone else) — the visibility rule denies the page before any comment UI. */
+goto('#/report/w_priv2_a');
+ok('a peer cannot reach a private weekly', !/PRIVATE2-WEEKLY-MARKER/.test(text()));
+ok('and so gets no comment box there', !window.document.getElementById('commentForm'));
+
+/* ================= WEEKLY REVIEW QUEUE (Phase 3) ================= */
+section('Weekly reports — review queue');
+
+await signInAs('sup@test.local');
+
+/* The professor is notified of a submitted weekly, from live state. */
+goto('#/inbox');
+ok('the professor is notified of a submitted weekly', /submitted a weekly report/i.test(text()));
+
+/* It sits in the needs-my-action queue. */
+goto('#/dashboard?bucket=action');
+ok('an un-reviewed weekly is in the needs-action queue', /QUEUE-WEEKLY-MARKER/.test(text()));
+
+const panelBtn = window.document.querySelector('[data-panel="w_queue"]');
+ok('the queued weekly has a Review control', !!panelBtn);
+if (panelBtn) panelBtn.click();
+const markBtn = window.document.querySelector('[data-markreviewed="w_queue"]');
+ok('an un-reviewed weekly offers Mark reviewed', !!markBtn);
+if (markBtn) markBtn.click();
+ok('Mark reviewed clears the review stamp on the server', await waitFor(async () => {
+  const j = await (await window.fetch('/api/reports/w_queue')).json();
+  return j.report && j.report.reviewedAt;
+}, 3000));
+
+/* And it leaves the queue. */
+goto('#/dashboard?bucket=action');
+ok('a reviewed weekly leaves the needs-action queue', !/QUEUE-WEEKLY-MARKER/.test(text()));
+
+/* Return to queue restores it. The review panel may already be open from the
+   earlier step (openPanel persists), so only click to open it if it is not. */
+goto('#/dashboard');
+if (!window.document.querySelector('[data-unreview="w_queue"]')) {
+  const panelBtn2 = window.document.querySelector('[data-panel="w_queue"]');
+  if (panelBtn2) panelBtn2.click();
+}
+const unBtn = window.document.querySelector('[data-unreview="w_queue"]');
+ok('a reviewed weekly offers Return to queue', !!unBtn);
+if (unBtn) unBtn.click();
+ok('Return to queue clears the stamp on the server', await waitFor(async () => {
+  const j = await (await window.fetch('/api/reports/w_queue')).json();
+  return j.report && !j.report.reviewedAt;
+}, 3000));
+
+goto('#/dashboard?bucket=action');
+ok('the returned weekly is back in the queue', /QUEUE-WEEKLY-MARKER/.test(text()));
+
+/* Editing a reviewed weekly keeps it reviewed and does not re-queue it. Awaited
+   throughout so it does not race the fire-and-forget writes above. */
+await ESH.api.reports.markReviewed('w_queue');
+const revd = await (await window.fetch('/api/reports/w_queue')).json();
+ok('the weekly is reviewed before the edit', !!revd.report.reviewedAt);
+await ESH.api.reports.update('w_queue', { title: 'QUEUE-WEEKLY-MARKER Week 7 (edited)' });
+const afterEdit = await (await window.fetch('/api/reports/w_queue')).json();
+ok('an edit after review keeps the review stamp', !!afterEdit.report.reviewedAt);
+ok('the edit history says it was edited after review',
+  (afterEdit.report.history || []).some((h) => h.note === 'Weekly edited after review.'));
+
+/* ================= QUICK-SUBMIT A WEEKLY (Phase 5) ================= */
+section('Weekly reports — quick submit');
+
+await signInAs('b@test.local');
+goto('#/submit-weekly');
+const qf = window.document.getElementById('repForm');
+ok('the quick-submit weekly form renders', !!qf);
+ok('it offers a visibility choice', !!(qf && qf.elements.visibility));
+
+let qid = null;
+if (qf) {
+  qf.elements.title.value = 'QUICKWEEKLY-MARKER Week 9';
+  qf.elements.abstract.value = 'Short update: measured three samples this week.';
+  /* Default visibility is private. Click the submit button (sets intent), then
+     submit the form. */
+  const submitBtn = qf.querySelector('button[value="submit"]');
+  submitBtn.click();
+  qf.dispatchEvent(new window.Event('submit', { cancelable: true, bubbles: true }));
+
+  ok('the quick weekly is created as a submitted, private weekly', await waitFor(async () => {
+    const boot = await (await window.fetch('/api/bootstrap')).json();
+    const w = (boot.reports || []).find((r) => r.title && r.title.indexOf('QUICKWEEKLY-MARKER') !== -1);
+    if (!w) return false;
+    qid = w.id;
+    return w.reportType === 'Weekly report' && w.status === 'submitted' && w.visibility === 'private';
+  }, 5000), 'server never recorded the quick weekly');
+}
+
+if (qid) {
+  /* Private: not in the library. */
+  await ESH.store.hydrate();
+  goto('#/library');
+  ok('a private quick weekly is not in the library', !/QUICKWEEKLY-MARKER/.test(text()));
+
+  /* Share it from the record page, then it appears. */
+  goto('#/report/' + qid);
+  const vt = window.document.getElementById('visToggle');
+  ok('the author gets a visibility toggle on the quick weekly', !!vt);
+  if (vt) {
+    vt.checked = true;
+    vt.dispatchEvent(new window.Event('change'));
+    ok('sharing persists to the server', await waitFor(async () => {
+      const j = await (await window.fetch('/api/reports/' + qid)).json();
+      return j.report && j.report.visibility === 'shared';
+    }, 3000));
+  }
+  await ESH.store.hydrate();
+  goto('#/library');
+  ok('a shared quick weekly now appears in the library', /QUICKWEEKLY-MARKER/.test(text()));
+
+  /* Edit it and confirm the change persists. */
+  goto('#/report/' + qid + '/edit');
+  ok('the quick weekly is editable', !!window.document.getElementById('repForm'));
+  await ESH.api.reports.update(qid, { title: 'QUICKWEEKLY-MARKER Week 9 (edited)' });
+  const j = await (await window.fetch('/api/reports/' + qid)).json();
+  ok('the edit persists', j.report.title === 'QUICKWEEKLY-MARKER Week 9 (edited)');
+}
+
+/* The all-clear state exists when the review queue empties. */
+await signInAs('sup@test.local');
+goto('#/dashboard?bucket=action&intern=u_cosup');   /* a researcher with no queued work */
+ok('an empty review queue shows an all-clear state',
+  /All clear/i.test(text()) || /review queue is empty/i.test(text()));
 
 /* ================= SIGNING OUT ================= */
 section('Signing out');
