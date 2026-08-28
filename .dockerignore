@@ -1,0 +1,9 @@
+.git
+.github
+node_modules
+server/node_modules
+server/data
+server/.env
+tests
+PROJECT-REFERENCE.md
+.claude
