@@ -1,0 +1,45 @@
+# Render Blueprint — the most turnkey way to deploy this.
+#
+# On render.com: New → Blueprint → connect this repo. Render reads this file,
+# builds the Dockerfile, and provisions a persistent disk for the database.
+# The secret env vars below (sync: false) are NOT in the repo — you enter them
+# in the Render dashboard on first deploy.
+#
+# A persistent disk is what makes the SQLite database survive restarts. Render's
+# free instance type does not include a disk, so this needs a paid instance
+# (check current pricing) — or use a host with a free volume (e.g. Fly.io) with
+# the same Dockerfile.
+services:
+  - type: web
+    name: eurospacehub
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: COOKIE_SECURE           # the session cookie MUST be Secure in production
+        value: "true"
+      - key: TRUST_PROXY             # Render terminates TLS at a proxy
+        value: "1"
+      - key: DATA_DIR
+        value: /data
+      - key: DB_PATH
+        value: /data/hub.db
+      # ---- secrets: enter these in the Render dashboard, not here ----
+      - key: B2_KEY_ID
+        sync: false
+      - key: B2_APPLICATION_KEY
+        sync: false
+      - key: B2_BUCKET_NAME
+        sync: false
+      - key: B2_ENDPOINT
+        sync: false
+      - key: B2_REGION
+        sync: false
+      - key: SEED_SUPERVISOR_EMAIL
+        sync: false
+    disk:
+      name: data
+      mountPath: /data
+      sizeGB: 1
