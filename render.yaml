@@ -1,16 +1,15 @@
 # Render Blueprint — a free way to get this running.
 #
 # On render.com: New → Blueprint → connect this repo. Render reads this file,
-# builds the Dockerfile, and runs it. No credit card is required for a free web
-# service. Secret env vars (sync: false) are entered in the Render dashboard.
+# builds the Dockerfile, and runs it on the free plan (no credit card needed).
 #
-# ⚠️ DATA DURABILITY: the free instance has an EPHEMERAL filesystem — the SQLite
-# database is wiped on every restart, redeploy, or idle spin-down. That is fine
-# to SHOW the app working; it is not fine for keeping real reports. Two ways to
-# make data durable (see DEPLOY.md):
-#   - add a persistent disk  (Render paid instance), or
-#   - replicate SQLite to your B2 bucket with Litestream  (free — ask me to wire
-#     it in).
+# This gets the whole app working EXCEPT file attachments, which need Backblaze
+# B2. B2 is intentionally left out here so the first deploy is simple; add the
+# five B2_* vars later (see DEPLOY.md) to turn on uploads.
+#
+# ⚠️ On the free plan the disk is EPHEMERAL: the database resets on every
+# restart / redeploy / idle spin-down. Fine to get it live; ask the developer to
+# add Litestream (free) or a paid disk when the data needs to persist.
 services:
   - type: web
     name: eurospacehub
@@ -29,16 +28,9 @@ services:
         value: /data
       - key: DB_PATH
         value: /data/hub.db
-      # ---- secrets: enter these in the Render dashboard, not here ----
-      - key: B2_KEY_ID
+      - key: SEED_SUPERVISOR_EMAIL   # the professor's login email; set this in the dashboard
         sync: false
-      - key: B2_APPLICATION_KEY
-        sync: false
-      - key: B2_BUCKET_NAME
-        sync: false
-      - key: B2_ENDPOINT
-        sync: false
-      - key: B2_REGION
-        sync: false
-      - key: SEED_SUPERVISOR_EMAIL
-        sync: false
+      # ---- OPTIONAL: file attachments (add later) ----
+      # Set these five in the dashboard to turn on report-file uploads. Until
+      # then everything else works and uploads are simply unavailable.
+      #   B2_KEY_ID, B2_APPLICATION_KEY, B2_BUCKET_NAME, B2_ENDPOINT, B2_REGION
