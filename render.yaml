@@ -3,13 +3,18 @@
 # On render.com: New → Blueprint → connect this repo. Render reads this file,
 # builds the Dockerfile, and runs it on the free plan (no credit card needed).
 #
-# This gets the whole app working EXCEPT file attachments, which need Backblaze
-# B2. B2 is intentionally left out here so the first deploy is simple; add the
-# five B2_* vars later (see DEPLOY.md) to turn on uploads.
+# Two levels, both free:
 #
-# ⚠️ On the free plan the disk is EPHEMERAL: the database resets on every
-# restart / redeploy / idle spin-down. Fine to get it live; ask the developer to
-# add Litestream (free) or a paid disk when the data needs to persist.
+#   1. Deploy with NO B2 vars  → everything works except file attachments, and
+#      the database RESETS on restart (free plan has an ephemeral disk). Good for
+#      trying it out.
+#
+#   2. Add the five B2_* vars  → turns on BOTH file attachments AND durable data:
+#      Litestream (built into the image) continuously backs the database up to
+#      the same B2 bucket and restores it on every boot, so nothing is lost when
+#      the free instance restarts. This is the recommended setup for real use.
+#
+# Backblaze B2 has a free tier, so level 2 is still $0.
 services:
   - type: web
     name: eurospacehub
@@ -30,7 +35,7 @@ services:
         value: /data/hub.db
       - key: SEED_SUPERVISOR_EMAIL   # the professor's login email; set this in the dashboard
         sync: false
-      # ---- OPTIONAL: file attachments (add later) ----
-      # Set these five in the dashboard to turn on report-file uploads. Until
-      # then everything else works and uploads are simply unavailable.
+      # ---- Backblaze B2 (recommended): durable data + file attachments ----
+      # Set all five in the dashboard to turn on durable storage (Litestream) and
+      # report-file uploads at once. Leave them blank for a quick ephemeral demo.
       #   B2_KEY_ID, B2_APPLICATION_KEY, B2_BUCKET_NAME, B2_ENDPOINT, B2_REGION

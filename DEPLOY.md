@@ -16,11 +16,19 @@ redeploy, or idle spin-down. So:
 - **Free and it just works (data resets):** any free host below. Perfect for
   showing the app live or a portfolio demo. **Real reports would not survive a
   restart** — do not use this to store work you care about keeping.
-- **Free AND your data survives:** add **Litestream**, which continuously copies
-  the SQLite file to the **B2 bucket you already create** and restores it on
-  boot. No extra service, no cost. It is a bit more setup — **ask me to wire it
-  into the Dockerfile** and I will.
-- **Paid and simplest:** a small persistent disk (~a few $/month on Render/Fly).
+- **Free AND your data survives:** set the five `B2_*` env vars. **Litestream is
+  already built into the image** and auto-activates when B2 is configured —
+  `docker-entrypoint.sh` restores the SQLite file from B2 on boot and
+  `litestream replicate` streams every change back to it (under the
+  `litestream/` key prefix, alongside — but separate from — report files). The
+  app runs SQLite in WAL mode, which Litestream requires. No extra service, no
+  cost beyond B2's free tier. This is the recommended production setup.
+- **Paid and simplest:** a small persistent disk (~a few $/month on Render/Fly),
+  mounted at `/data`. With a disk, the local file persists and Litestream simply
+  replicates it as an off-host backup.
+
+The entrypoint decides automatically: **B2 set → durable (Litestream); B2 unset →
+plain `node index.js` on the local disk.** One image, both modes.
 
 ## What you decide (I can't do these for you)
 

@@ -87,17 +87,55 @@ queue.
 
 ## Two things to know
 
-**1. Data resets on the free plan.** Render's free tier wipes the database
-whenever the app restarts or sleeps after inactivity. That means accounts and
-reports can disappear, and you'd re-run `node seed.js` (Step 4). This is fine for
-trying it out and showing people. **Before real use, ask the developer to turn on
-permanent storage** — it can be done for free (a tool called Litestream) or with
-a small paid disk (~a few dollars a month). One message to the dev and it's
-handled.
+**1. As set up above, data resets.** Render's free tier wipes the database when
+the app restarts or sleeps. Accounts and reports can disappear, and you'd re-run
+`node seed.js`. **That is fine for trying it out.** For real use, do the
+"Make it permanent" step below — it's free.
 
 **2. The free app "sleeps."** After ~15 minutes of no use it spins down, so the
 very first visit after a quiet spell takes ~30 seconds to wake up. Normal for
 free hosting.
+
+---
+
+## Make it permanent (recommended, still free) — ~10 minutes
+
+This uses free cloud storage to continuously back up the database, so nothing is
+lost when the free app restarts. **The same step also turns on file attachments**
+(letting people attach PDFs to reports). The app already has the backup tool
+built in — you just create the storage and paste five values.
+
+1. **Create a Backblaze account** at **backblaze.com** and open **B2 Cloud
+   Storage**. The first 10 GB are free (far more than this needs).
+   - *Heads-up:* Backblaze usually asks for a card on file to switch B2 on, even
+     though you won't be charged under the free limit. If you'd rather not put a
+     card anywhere at all, skip this and stay on the resets-on-restart setup.
+2. **Create a bucket**: B2 → **Buckets** → **Create a Bucket**. Name it (e.g.
+   `eurospacehub`), set it **Private**. Note the **Endpoint** shown for it (looks
+   like `s3.us-west-004.backblazeb2.com`) — the middle part (`us-west-004`) is
+   the **region**.
+3. **Create an application key**: B2 → **Application Keys** → **Add a New
+   Application Key**. Allow it access to that bucket, with read **and** write.
+   It shows a **keyID** and an **applicationKey** — copy both now (the key is
+   shown once).
+4. **Put the five values into Render**: your service → **Environment** → add:
+   - `B2_KEY_ID` = the keyID
+   - `B2_APPLICATION_KEY` = the applicationKey
+   - `B2_BUCKET_NAME` = your bucket name (e.g. `eurospacehub`)
+   - `B2_ENDPOINT` = `https://` + the endpoint, e.g.
+     `https://s3.us-west-004.backblazeb2.com`
+   - `B2_REGION` = the region, e.g. `us-west-004`
+5. **Save** — Render redeploys automatically. From now on the database is backed
+   up to Backblaze and restored on every restart. Run `node seed.js` **once** more
+   (Step 4) so the professor's account gets saved into the backup; after that it
+   persists.
+6. **For file uploads specifically**, one extra thing: in the Backblaze bucket's
+   **CORS settings**, allow your Render web address. The exact text to paste is in
+   the project file `server/b2-cors.json` (replace the example address with your
+   real `…onrender.com` one). Everything else already works without this; only
+   attaching files needs it.
+
+That's it — permanent, free, and file attachments on.
 
 ---
 

@@ -1,0 +1,18 @@
+# Litestream — continuously replicates the SQLite database to Backblaze B2 (which
+# exposes an S3-compatible API) and restores it on boot. This is what makes the
+# data survive on a host with an ephemeral disk (e.g. a free Render instance).
+#
+# It reuses the SAME B2 credentials the app uses for report files; the database
+# backup lives under its own key prefix so it never collides with uploaded files.
+# The app already runs SQLite in WAL mode, which Litestream requires.
+dbs:
+  - path: ${DB_PATH}
+    replicas:
+      - type: s3
+        bucket: ${B2_BUCKET_NAME}
+        path: litestream/hub.db
+        endpoint: ${B2_ENDPOINT}
+        region: ${B2_REGION}
+        access-key-id: ${B2_KEY_ID}
+        secret-access-key: ${B2_APPLICATION_KEY}
+        force-path-style: true
