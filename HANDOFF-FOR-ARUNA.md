@@ -1,171 +1,251 @@
-# Getting the Research Hub live — step-by-step for Aruna
+# Getting the Research Hub online — a detailed guide for Aruna
 
-This puts the weekly-report tool online at a real web address that anyone in the
-group can use. It's free, needs no credit card, and takes about 20 minutes.
+This puts the weekly-report tool on a real web address the whole group can use.
+It's free and needs no coding. Total time: about 20 minutes for the basic
+version, plus 10 more if you do the "make it permanent" part.
 
-You do **not** need to understand the code. Just follow the steps in order.
-
----
-
-## What you're doing, in one sentence
-
-The website is finished, but a website like this needs a "server" to run on.
-GitHub Pages (where it was before) can't run a server, which is why it showed
-"cannot reach its server." We'll put it on **Render**, a free service that can.
-
-**Skip Backblaze / file uploads for now.** Everything works without it —
-submitting weeklies, sharing, the professor's review queue, comments, the
-library. Only *attaching PDF files* to a report needs an extra service, and we
-can add that later. Don't let it block you.
+**You do not need to understand the code.** Follow the steps in order. Each step
+says what to click and what you'll see.
 
 ---
 
-## Before you start
+## Background (read once, then forget)
 
-- The code is already on GitHub at **github.com/ArunaHarikant/EuroSpaceHub**.
-  You own it, so you're all set there.
-- Have that GitHub login handy.
+- A website like this has two halves: the **pages** you see, and a **server**
+  running behind them that stores the accounts and reports.
+- It used to be on **GitHub Pages**, which can only host the pages — not a
+  server. That's why it showed *"The hub cannot reach its server."* Nothing is
+  broken; it just needs somewhere that can run the server half.
+- We'll use **Render** (render.com) — a free service that runs the whole thing.
+- **You can ignore file uploads at first.** Everything works without them —
+  submitting weeklies, sharing them, the professor's review queue, comments, the
+  library. Only *attaching a PDF to a report* needs an extra service (covered at
+  the end). Don't let it hold you up.
+
+You'll create **one free account (Render)** for the basic version. That's it.
 
 ---
 
-## Step 1 — Merge the deployment files (1 minute)
+# PART A — Get it live (≈20 min, no credit card)
 
-There's a pull request waiting that adds the files Render needs.
+## Step 1 — Merge the deployment files on GitHub
 
-1. Go to **github.com/ArunaHarikant/EuroSpaceHub/pulls**
-2. Open the one titled **"Add deployment config…"**
-3. Click the green **Merge pull request**, then **Confirm merge**.
+A change is waiting that adds the files Render needs to run the app.
 
-That's it — the `Dockerfile` and `render.yaml` are now in the project.
+1. Go to **https://github.com/ArunaHarikant/EuroSpaceHub/pulls**
+2. You'll see a list of "Pull requests." Click the one titled something like
+   **"Add deployment config"** (there may be a couple of deploy-related ones —
+   open the newest **Deploy** one).
+3. Scroll down and click the green **Merge pull request** button, then
+   **Confirm merge**.
+4. It'll show "Merged" in purple. Done — the `Dockerfile` and `render.yaml`
+   files are now part of the project.
 
-## Step 2 — Make a Render account (2 minutes)
+*(If the green button is greyed out and says checks are running, wait a couple
+minutes for the tests to finish, then it goes green.)*
 
-1. Go to **render.com**.
-2. Click **Get Started** / **Sign Up**, and choose **Sign in with GitHub** (use
-   the same GitHub account that owns the repo). It will **not** ask for a card.
-3. When GitHub asks, **authorize Render** to see your repositories.
+## Step 2 — Create a Render account
 
-## Step 3 — Deploy the app (5 minutes)
+1. Open **https://render.com**
+2. Click **Get Started for Free** (or **Sign In**).
+3. Choose **GitHub** as the sign-in method, and use the **same GitHub account
+   that owns the EuroSpaceHub repository**.
+4. GitHub will ask you to authorize Render — click **Authorize Render**.
+5. If it asks which repositories Render may access, either allow all, or pick
+   **EuroSpaceHub** specifically.
 
-1. In Render, click **New +** (top right) → **Blueprint**.
-2. Find and select the **EuroSpaceHub** repository, click **Connect**.
-3. Render reads the project's `render.yaml` and shows a service called
-   **eurospacehub**. It will ask you to fill in one value:
-   - **SEED_SUPERVISOR_EMAIL** → type the professor's login email, e.g.
-     `bernard.foing@eurospacehub.local` (this is just the username he'll sign in
-     with — it does not send any email).
-4. Click **Apply** / **Create**. Render now builds the app. This takes a few
-   minutes — you'll see logs scroll by. Wait for it to say **Live**.
+You will **not** be asked for a credit card for the free plan.
 
-When it's live, Render shows a web address like
-**https://eurospacehub.onrender.com** — that's your hub. Open it; you'll see the
-sign-in screen.
+## Step 3 — Deploy the app
 
-## Step 4 — Create the professor's login (2 minutes)
+1. In the Render dashboard, click **New +** near the top right, then choose
+   **Blueprint**.
+   - *("Blueprint" means "read the settings file in the repo and set everything
+     up for me" — that file is the `render.yaml` you just merged.)*
+2. Find **EuroSpaceHub** in the list and click **Connect**.
+3. Render reads the settings and shows a service named **eurospacehub**. It asks
+   you to fill in **one** value, called **SEED_SUPERVISOR_EMAIL**:
+   - Type the professor's sign-in email, for example
+     **`bernard.foing@eurospacehub.local`**.
+   - This is just the username he'll log in with. **No email is actually sent.**
+     It can be any address-shaped text.
+4. Click **Apply** (or **Create Services**).
+5. Render now **builds** the app. You'll see logs scrolling. This takes roughly
+   3–7 minutes. Wait until the status turns **Live** (green).
 
-Right now there are zero accounts. Create the first one (the supervisor):
+When it's live, near the top of the service page Render shows the web address,
+like **`https://eurospacehub.onrender.com`**. Click it — you should see the hub's
+**Sign in** screen. 🎉 The server half is now running.
 
-1. In Render, open your **eurospacehub** service → click the **Shell** tab.
-2. Type this and press Enter:
+## Step 4 — Create the professor's login
+
+Right now there are **zero accounts**. Create the first one (the supervisor)
+using Render's built-in command box:
+
+1. On your **eurospacehub** service page in Render, click the **Shell** tab (left
+   side or top, depending on layout).
+2. A black command box appears. Type exactly:
    ```
    node seed.js
    ```
-3. It prints a line like `Password: A1b2C3...` — **copy that password and save
-   it somewhere safe.** It's shown only once.
+   and press **Enter**.
+3. It prints a few lines, including one like:
+   ```
+   Password: 7Qx2Rf9kLmA
+   ```
+   **Copy that password and save it somewhere safe** (it is shown only once).
 
-Now go to your hub's web address, click **Sign in**, and log in with the
-professor's email (from Step 3) and that password.
+## Step 5 — Sign in and add your team
 
-## Step 5 — You're live
+1. Go to your hub's web address and click **Sign in**.
+2. Log in with the professor's email (Step 3) and the password (Step 4).
+3. You land on the **Supervisor dashboard**. Use the **Add researcher** button to
+   create an account for each student — each gets a one-time password you hand
+   to them.
+4. Students sign in, click **Quick-submit a weekly**, and their weeklies appear
+   in your review queue with **Mark reviewed** / **Return to queue** buttons.
 
-From the supervisor dashboard, use **Add researcher** to create an account for
-each student. Each gets a one-time password you hand to them. Students sign in,
-click **Quick-submit a weekly**, and you'll see their weeklies in your review
-queue.
-
----
-
-## Two things to know
-
-**1. As set up above, data resets.** Render's free tier wipes the database when
-the app restarts or sleeps. Accounts and reports can disappear, and you'd re-run
-`node seed.js`. **That is fine for trying it out.** For real use, do the
-"Make it permanent" step below — it's free.
-
-**2. The free app "sleeps."** After ~15 minutes of no use it spins down, so the
-very first visit after a quiet spell takes ~30 seconds to wake up. Normal for
-free hosting.
+**You now have a working hub.** If you only want to try it out or demo it, you can
+stop here — but read the one caveat below.
 
 ---
 
-## Make it permanent (recommended, still free) — ~10 minutes
+## ⚠️ Important caveat for Part A
 
-This uses free cloud storage to continuously back up the database, so nothing is
-lost when the free app restarts. **The same step also turns on file attachments**
-(letting people attach PDFs to reports). The app already has the backup tool
-built in — you just create the storage and paste five values.
+On Render's **free** plan, the app's storage is temporary. Whenever the app
+**restarts** (Render redeploys, or it goes to sleep after ~15 minutes of no use
+and someone wakes it), the database is **wiped** — accounts and reports
+disappear, and you'd redo Steps 4–5.
 
-1. **Create a Backblaze account** at **backblaze.com** and open **B2 Cloud
-   Storage**. The first 10 GB are free (far more than this needs).
-   - *Heads-up:* Backblaze usually asks for a card on file to switch B2 on, even
-     though you won't be charged under the free limit. If you'd rather not put a
-     card anywhere at all, skip this and stay on the resets-on-restart setup.
-2. **Create a bucket**: B2 → **Buckets** → **Create a Bucket**. Name it (e.g.
-   `eurospacehub`), set it **Private**. Note the **Endpoint** shown for it (looks
-   like `s3.us-west-004.backblazeb2.com`) — the middle part (`us-west-004`) is
-   the **region**.
-3. **Create an application key**: B2 → **Application Keys** → **Add a New
-   Application Key**. Allow it access to that bucket, with read **and** write.
-   It shows a **keyID** and an **applicationKey** — copy both now (the key is
-   shown once).
-4. **Put the five values into Render**: your service → **Environment** → add:
-   - `B2_KEY_ID` = the keyID
-   - `B2_APPLICATION_KEY` = the applicationKey
-   - `B2_BUCKET_NAME` = your bucket name (e.g. `eurospacehub`)
-   - `B2_ENDPOINT` = `https://` + the endpoint, e.g.
-     `https://s3.us-west-004.backblazeb2.com`
-   - `B2_REGION` = the region, e.g. `us-west-004`
-5. **Save** — Render redeploys automatically. From now on the database is backed
-   up to Backblaze and restored on every restart. Run `node seed.js` **once** more
-   (Step 4) so the professor's account gets saved into the backup; after that it
+- **Totally fine** for: showing people, testing, a short demo.
+- **Not fine** for: actually collecting weeklies you need to keep.
+
+Also, because the free app sleeps, the **first visit after a quiet period takes
+~30 seconds** to wake up. Normal for free hosting.
+
+To fix the wipe permanently — for free — do Part B.
+
+---
+
+# PART B — Make it permanent (≈10 min, still free)
+
+This adds free cloud storage that continuously backs up the database, so nothing
+is lost when the free app restarts. **The same step also switches on file
+attachments.** The backup tool is already built into the app; you just create the
+storage and paste five values into Render.
+
+> **One honest heads-up:** the storage service (Backblaze) usually asks for a
+> **card on file** to switch on its B2 storage, even though you stay within the
+> free 10 GB and won't be charged. If you refuse to put a card anywhere at all,
+> skip Part B and live with the Part A caveat (or ask the developer about a small
+> paid disk instead).
+
+## Step 6 — Create Backblaze cloud storage
+
+1. Go to **https://www.backblaze.com**, click **Sign Up**, and make a free
+   account.
+2. In the left menu, open **B2 Cloud Storage** (you may need to enable it; the
+   first 10 GB are free).
+3. Click **Buckets → Create a Bucket**:
+   - **Bucket name:** something unique, e.g. `eurospacehub-yourname`
+   - **Files in Bucket are:** **Private**
+   - Create it.
+4. On the bucket's page, note its **Endpoint** — it looks like
+   `s3.us-west-004.backblazeb2.com`. The middle piece (`us-west-004`) is the
+   **region**. Write both down.
+5. In the left menu, open **Application Keys → Add a New Application Key**:
+   - **Name:** `eurospacehub`
+   - **Allow access to Bucket(s):** choose the bucket you just made
+   - **Type of Access:** **Read and Write**
+   - Create it. It now shows a **keyID** and an **applicationKey**.
+     **Copy both immediately** — the applicationKey is shown only once.
+
+You now have five pieces of information:
+`keyID`, `applicationKey`, `bucket name`, `endpoint`, `region`.
+
+## Step 7 — Paste the five values into Render
+
+1. Back in Render, open your **eurospacehub** service → **Environment** tab.
+2. Click **Add Environment Variable** and add these five (name on the left, your
+   value on the right):
+
+   | Name | Value (example) |
+   |---|---|
+   | `B2_KEY_ID` | your keyID |
+   | `B2_APPLICATION_KEY` | your applicationKey |
+   | `B2_BUCKET_NAME` | `eurospacehub-yourname` |
+   | `B2_ENDPOINT` | `https://s3.us-west-004.backblazeb2.com` |
+   | `B2_REGION` | `us-west-004` |
+
+   *(Note the `https://` on the endpoint. Use YOUR values, not the examples.)*
+3. Click **Save Changes**. Render redeploys automatically (a few minutes).
+
+From now on the database is **backed up to Backblaze and restored on every
+restart** — nothing is lost.
+
+## Step 8 — Re-seed once, so the professor account is saved into the backup
+
+Because the account you made in Step 4 was on the temporary storage, create it
+once more now that permanent storage is on:
+
+1. Render → your service → **Shell** tab.
+2. Run `node seed.js` again, and save the new password.
+3. Sign in with it. From here on, everything you and the students create
    persists.
-6. **For file uploads specifically**, one extra thing: in the Backblaze bucket's
-   **CORS settings**, allow your Render web address. The exact text to paste is in
-   the project file `server/b2-cors.json` (replace the example address with your
-   real `…onrender.com` one). Everything else already works without this; only
-   attaching files needs it.
 
-That's it — permanent, free, and file attachments on.
+## Step 9 (only for file attachments) — allow uploads from your address
+
+Attaching PDFs to reports needs one more Backblaze setting:
+
+1. In Backblaze, open your bucket → **CORS Rules** (or "Bucket Settings").
+2. Paste the rule from the project file **`server/b2-cors.json`**, changing the
+   example web address to your real Render one (e.g.
+   `https://eurospacehub.onrender.com`).
+3. Save.
+
+Everything else already worked without this; only file **uploads** needed it.
 
 ---
 
-## About the existing eurospacehub.com website
+## About putting this on eurospacehub.com
 
-You asked whether this should live inside **eurospacehub.com/about**. Short
-answer: **not yet, and it doesn't need to.**
+You asked whether it should live inside **eurospacehub.com/about**. **Not yet, and
+it doesn't need to.**
 
-- We don't know who controls that site or how it's built, and wiring a login-based
-  tool into someone else's site is fiddly (it introduces cross-site cookie and
-  security issues this standalone setup avoids).
-- For now, the hub stands on its own at the Render address. That's a complete,
-  usable tool.
-- **Later**, if you want it under the eurospacehub.com brand, the clean options
-  are: (a) put a link/button on eurospacehub.com pointing to the hub, or (b) give
-  the hub a custom address like `hub.eurospacehub.com` (Render supports custom
-  domains — whoever manages the eurospacehub.com domain adds one DNS record). Both
-  are easy once someone with access to that domain is in the loop.
-
-Get it running standalone first. Branding and integration are a later, separate
-task.
+- We don't know who controls that site or how it's built, and embedding a
+  login-based tool into someone else's website is fiddly and introduces security
+  issues this standalone setup avoids.
+- For now the hub stands on its own at the Render address — a complete, usable
+  tool.
+- **Later**, to bring it under the brand, the clean options are:
+  1. Add a **link/button** on eurospacehub.com that opens the hub, or
+  2. Give the hub a nicer address like **`hub.eurospacehub.com`** — Render
+     supports custom domains; whoever manages the eurospacehub.com domain adds one
+     DNS record and Render walks you through it.
+- Both are easy **once someone with access to that domain is involved.** Get it
+  running standalone first; branding is a separate, later task.
 
 ---
 
 ## If something goes wrong
 
-- **Build failed / red status:** open the service's **Logs** tab and send the
-  last ~20 lines to the developer.
-- **"cannot reach its server" on the page:** the app is still starting or
-  asleep — wait a minute and click **Try again**. If it persists, check the
-  service is **Live** in Render.
-- **Forgot the supervisor password:** re-run `node seed.js` in the Shell (on the
-  free tier it'll make a fresh one after a reset).
+- **Green "Merge" button greyed out (Step 1):** tests are still running — wait a
+  minute, it goes green.
+- **Build failed / red status in Render:** open the **Logs** tab, copy the last
+  ~20 lines, and send them to the developer.
+- **Page says "cannot reach its server":** the app is starting or asleep — wait a
+  minute and click **Try again**. If it persists, confirm the service shows
+  **Live** in Render.
+- **Forgot the supervisor password:** run `node seed.js` in the Shell again.
+- **File upload fails but everything else works:** you haven't done Part B / Step
+  9 (Backblaze + CORS) yet.
+
+---
+
+## Quick reference — what each account is for
+
+| Service | Free? | What it does | Needed for |
+|---|---|---|---|
+| **GitHub** | yes | holds the code (you already have it) | everything |
+| **Render** | yes, no card | runs the app, gives it a web address | Part A — the whole hub |
+| **Backblaze B2** | yes under 10 GB (card on file) | permanent database backup + file storage | Part B — keeping data + file uploads |
