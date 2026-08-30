@@ -1,0 +1,8 @@
+# Shell scripts and container files MUST use LF line endings, or they fail to
+# run inside a Linux container when checked out on Windows (CRLF turns the
+# shebang into "#!/bin/sh\r", which the kernel cannot find).
+*.sh              text eol=lf
+docker-entrypoint.sh text eol=lf
+Dockerfile        text eol=lf
+*.yml             text eol=lf
+*.yaml            text eol=lf
