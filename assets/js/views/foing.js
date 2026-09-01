@@ -17,17 +17,7 @@
     return '' +
     '<section class="hero"><div class="wrap">' +
       '<p class="eyebrow">EuroSpaceHub · Research Hub</p>' +
-      '<h1>Prof. Bernard Foing — Lunar &amp; Mars Research Hub</h1>' +
-      '<p class="lede">The working space for interns and student researchers <em>currently ' +
-        'undertaking</em> a supervised research period with Prof. Bernard Foing, across ISU, ' +
-        'ILEWG campaigns, VU Amsterdam and partner institutions. They hold a profile here, ' +
-        'submit their lunar and Mars research outputs for review, and — once approved — share ' +
-        'that work with the rest of the group. Access is restricted to members of the ' +
-        'research group.</p>' +
-      /* Textual equivalent for the aria-hidden decorative backdrop. */
-      '<p class="hero__caption">Backdrop: selected lunar and Mars missions.<br>' +
-        '<span class="key key--esa">European (ESA)</span>' +
-        '<span class="key key--nasa">United States (NASA)</span></p>' +
+      '<h1>EuroSpaceResearchHub</h1>' +
     '</div></section>';
   }
 

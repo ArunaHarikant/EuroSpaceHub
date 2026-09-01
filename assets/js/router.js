@@ -6,6 +6,8 @@
 (function (global) {
   'use strict';
 
+  var SITE_NAME = 'EuroSpaceResearchHub';
+
   var routes = [];      /* { pattern, keys, guard, render } */
   var notFound = null;
   var currentPath = '';
@@ -114,8 +116,12 @@
     if (!loc.query.keepScroll) global.scrollTo({ top: 0, behavior: 'auto' });
     var view = document.getElementById('view');
     var h1 = view.querySelector('h1');
-    document.title = (h1 ? h1.textContent.trim() + ' — ' : '') +
-      'Lunar & Mars Research Hub | EuroSpaceHub';
+    /* The landing page's h1 IS the site name, so prefixing it would render the
+       tab as "EuroSpaceResearchHub — EuroSpaceResearchHub". */
+    var heading = h1 ? h1.textContent.trim() : '';
+    document.title = (heading && heading !== SITE_NAME)
+      ? heading + ' — ' + SITE_NAME
+      : SITE_NAME;
   }
 
   function start() {
