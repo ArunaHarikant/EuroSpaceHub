@@ -70,7 +70,7 @@
 
   function subnavItems() {
     var items = [
-      { href: '#/',        label: 'Prof. Foing',    match: ['/'] },
+      { href: '#/', label: 'Home', match: ['/'] },
     ];
     /* The library is members-only, so it is not advertised to signed-out visitors. */
     if (auth.isAuthenticated()) {
